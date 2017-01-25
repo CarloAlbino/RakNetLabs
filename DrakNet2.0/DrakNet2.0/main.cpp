@@ -25,8 +25,23 @@ RakNet::RakPeerInterface *g_rakPeerInterface;	// Used to connect users together
 bool g_isServer = false;
 RakNet::SystemAddress g_serverAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;	// Default server address
 
-const unsigned int QUIT = 0;
-const unsigned int CONTINUE = 1;
+enum UserINputResult
+{
+	UIR_BREAK,
+	UIR_CONTINUE, 
+	UIR_POS, 
+	UIR_COUNT,
+};
+
+enum {
+   ID_GB3_CHAT = ID_USER_PACKET_ENUM,
+   ID_GB3_POS,
+};
+
+struct SPos
+{
+	float x, y, z;
+};
 
 // Holds all the users' name
 //DataStructures::List<char[]> userList;
@@ -158,7 +173,9 @@ int main(void)
 	}
 	puts("\n===============================================================\n");
 
-	char message[2048];
+	char message[2046];
+	// Message now holds what we want to broadcast
+	char msgWithIdentifier[2048];
 	// Holds packets
 	RakNet::Packet* packet;
 	// GetPacketIdentifier returns this
@@ -172,47 +189,66 @@ int main(void)
 
 		if (_kbhit())
 		{
-			// Notice what is not here: something to keep our network running.  It's
-			// fine to block on gets or anything we want
-			// Because the network engine was painstakingly written using threads.
 			Gets(message, sizeof(message));
-
 			unsigned int result = CheckForCommands(message);
-			if (result == QUIT)
+			if (result == UIR_BREAK)
 			{
 				// Quit program
 				break;
 			}
-			else if (result == CONTINUE)
+			else if (result == UIR_CONTINUE)
 			{
 				// Goes back to the top of the while loop
 				continue;
 			}
-
-			// Message now holds what we want to broadcast
-			char message2[2048];
-			// Append Server: to the message so clients know that it ORIGINATED from the server
-			// All messages to all clients come from the server either directly or by being
-			// relayed from other clients
-			message2[0] = 0;
-			//const static char prefix[] = ;
-			strncpy(message2, userName, sizeof(message2));
-			strncat(message2, message, sizeof(message2) - strlen(userName) - 1);
-
-			// message2 is the data to send
-			// strlen(message2)+1 is to send the null terminator
-			// HIGH_PRIORITY doesn't actually matter here because we don't use any other priority
-			// RELIABLE_ORDERED means make sure the message arrives in the right order
-			// We arbitrarily pick 0 for the ordering stream
-			// RakNet::UNASSIGNED_SYSTEM_ADDRESS means don't exclude anyone from the broadcast
-			// true means broadcast the message to everyone connected
-			if (g_isServer)
+			else if (result == UIR_POS)
 			{
-				g_rakPeerInterface->Send(message2, (const int)strlen(message2) + 1, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+				RakNet::BitStream bs;
+				bs.Write((unsigned char)ID_GB3_POS);
+				bs.Write(7.0f);
+
+				if (g_isServer)
+				{
+					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+				}
+				else
+				{
+					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, g_serverAddress, false);
+				}
+				continue;
 			}
 			else
 			{
-				g_rakPeerInterface->Send(message2, (const int)strlen(message2) + 1, HIGH_PRIORITY, RELIABLE_ORDERED, 0, g_serverAddress, false);
+				// Notice what is not here: something to keep our network running.  It's
+				// fine to block on gets or anything we want
+				// Because the network engine was painstakingly written using threads.
+				msgWithIdentifier[0] = ID_GB3_CHAT;
+				msgWithIdentifier[1] = '\0';
+				strncat(msgWithIdentifier, userName, sizeof(msgWithIdentifier));
+				strncat(msgWithIdentifier, message, sizeof(message) - strlen(userName) - 1);
+				// Append Server: to the message so clients know that it ORIGINATED from the server
+				// All messages to all clients come from the server either directly or by being
+				// relayed from other clients
+				//msgWithIdentifier[0] = 0;
+				//const static char prefix[] = ;
+				//strncat(msgWithIdentifier, userName, sizeof(msgWithIdentifier));
+				//strncat(msgWithIdentifier, message, sizeof(msgWithIdentifier) - strlen(userName) - 1);
+
+				// message2 is the data to send
+				// strlen(message2)+1 is to send the null terminator
+				// HIGH_PRIORITY doesn't actually matter here because we don't use any other priority
+				// RELIABLE_ORDERED means make sure the message arrives in the right order
+				// We arbitrarily pick 0 for the ordering stream
+				// RakNet::UNASSIGNED_SYSTEM_ADDRESS means don't exclude anyone from the broadcast
+				// true means broadcast the message to everyone connected
+				if (g_isServer)
+				{
+					g_rakPeerInterface->Send(msgWithIdentifier, (const int)strlen(msgWithIdentifier) + 1, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+				}
+				else
+				{
+					g_rakPeerInterface->Send(msgWithIdentifier, (const int)strlen(msgWithIdentifier) + 1, HIGH_PRIORITY, RELIABLE_ORDERED, 0, g_serverAddress, false);
+				}
 			}
 
 		}// End of KBHIT
@@ -224,7 +260,7 @@ int main(void)
 			// We got a packet, get the identifier with our handy function
 			packetIdentifier = GetPacketIdentifier(packet);	// Packet identifier, lets you know what type of communication is being recieved
 
-														// Check if this is a network message packet
+			// Check if this is a network message packet
 			switch (packetIdentifier)
 			{
 			case ID_CONNECTION_REQUEST_ACCEPTED:
@@ -234,11 +270,11 @@ int main(void)
 					g_serverAddress = packet->systemAddress;
 				}
 				break;
+
 			case ID_DISCONNECTION_NOTIFICATION:
 				// Connection lost normally
 				printf("ID_DISCONNECTION_NOTIFICATION from %s\n\n", packet->systemAddress.ToString(true));;
 				break;
-
 
 			case ID_NEW_INCOMING_CONNECTION:
 				// Somebody connected.  We have their IP now
@@ -252,7 +288,6 @@ int main(void)
 						printf("%i. %s\n", index + 1, internalId.ToString(true));
 					}
 				}
-
 				break;
 
 			case ID_INCOMPATIBLE_PROTOCOL_VERSION:
@@ -270,19 +305,38 @@ int main(void)
 				printf("ID_CONNECTION_LOST from %s\n", packet->systemAddress.ToString(true));;
 				break;
 
+			case ID_GB3_CHAT:
+			{
+				unsigned char *pp = packet->data;
+				++pp;
+				printf("%s\n", pp);
+			}
+				break;
+			case ID_GB3_POS:
+			{
+				printf("ID_GB3_POS\n");
+				RakNet::BitStream bs(packet->data, packet->length, false);
+				bs.IgnoreBytes(sizeof(RakNet::MessageID));
+				float xPos;
+				bs.Read(xPos);
+
+				printf("pos x: %f \n", xPos);
+			}
+				
+				break;
 			default:
 				// The server knows the static data of all clients, so we can prefix the message
 				// With the name data
-				printf("%s\n", packet->data);
+				printf("%i\n", packet->data[0]);
 
 				// Relay the message.  We prefix the name for other clients.  This demonstrates
 				// That messages can be changed on the server before being broadcast
 				// Sending is the same as before
-				sprintf(message, "%s", packet->data);
+				/*sprintf(message, "%s", packet->data);
 				if (g_isServer)
 				{
 					g_rakPeerInterface->Send(message, (const int)strlen(message) + 1, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, true);
-				}
+				}*/
 
 				break;
 			}
@@ -317,61 +371,16 @@ unsigned char GetPacketIdentifier(RakNet::Packet *p)
 // Add any commands needed in here
 int CheckForCommands(char* message)
 {
-	char userInput[30];
 	if (strcmp(message, "quit") == 0)
 	{
 		puts("Quitting.");
-		return QUIT;
+		return UIR_BREAK;
 	}
 
-	if (strcmp(message, "pingip") == 0)
+	if (strcmp(message, "pos") == 0)
 	{
-		printf("Enter IP: ");
-		Gets(message, sizeof(message));
-		printf("Enter port: ");
-		Gets(userInput, sizeof(userInput));
-		if (userInput[0] == 0)
-			strcpy(userInput, "1234");
-		g_rakPeerInterface->Ping(message, atoi(userInput), false);
-
-		return CONTINUE;
+		return UIR_POS;
 	}
 
-	if (strcmp(message, "getconnectionlist") == 0)
-	{
-		RakNet::SystemAddress systems[10];
-		unsigned short numConnections = 10;
-		g_rakPeerInterface->GetConnectionList((RakNet::SystemAddress*) &systems, &numConnections);
-		for (int i = 0; i < numConnections; i++)
-		{
-			printf("%i. %s\n", i + 1, systems[i].ToString(true));
-		}
-		
-		return CONTINUE;
-	}
-
-	if (strcmp(message, "ban") == 0)
-	{
-		printf("Enter IP to ban.  You can use * as a wildcard\n");
-		Gets(message, sizeof(message));
-		g_rakPeerInterface->AddToBanList(message);
-		printf("IP %s added to ban list.\n", message);
-
-		return CONTINUE;
-	}
-
-	return 3;
+	return UIR_COUNT;
 }
-
-/*bool IsNameTaken(char* name)
-{
-	for (int i = 0; i < userList.Size(); i++)
-	{
-		if (name == userList[i])
-		{
-			return true;
-		}
-	}
-
-	return false;
-}*/

@@ -17,9 +17,17 @@
 #include "Gets.h"
 #include <algorithm>
 
+#include <time.h>
+
+
+struct SPos
+{
+	float x, y, z;
+};
+
 unsigned char GetPacketIdentifier(RakNet::Packet *p);
 int CheckForCommands(char* message);
-//bool IsNameTaken(char* name);
+SPos GetRandomPos();
 
 RakNet::RakPeerInterface *g_rakPeerInterface;	// Used to connect users together
 bool g_isServer = false;
@@ -37,14 +45,6 @@ enum {
    ID_GB3_CHAT = ID_USER_PACKET_ENUM,
    ID_GB3_POS,
 };
-
-struct SPos
-{
-	float x, y, z;
-};
-
-// Holds all the users' name
-//DataStructures::List<char[]> userList;
 
 int main(void)
 {
@@ -205,7 +205,8 @@ int main(void)
 			{
 				RakNet::BitStream bs;
 				bs.Write((unsigned char)ID_GB3_POS);
-				bs.Write(7.0f);
+				bs.Write(GetRandomPos());
+				bs.Write(userName);
 
 				if (g_isServer)
 				{
@@ -317,10 +318,12 @@ int main(void)
 				printf("ID_GB3_POS\n");
 				RakNet::BitStream bs(packet->data, packet->length, false);
 				bs.IgnoreBytes(sizeof(RakNet::MessageID));
-				float xPos;
-				bs.Read(xPos);
+				SPos newPos;
+				bs.Read(newPos);
+				char name[30];
+				bs.Read(name);
 
-				printf("pos x: %f \n", xPos);
+				printf("%s pos x: %f - pos y: %f - pos z: %f\n", name, newPos.x, newPos.y, newPos.z);
 			}
 				
 				break;
@@ -383,4 +386,22 @@ int CheckForCommands(char* message)
 	}
 
 	return UIR_COUNT;
+}
+
+SPos GetRandomPos()
+{
+	SPos position;
+	int randomNum;
+	srand(time(NULL));
+
+	randomNum = rand() % 100 + 1;
+	position.x = randomNum;
+
+	randomNum = rand() % 100 + 1;
+	position.y = randomNum;
+
+	randomNum = rand() % 100 + 1;
+	position.z = randomNum;
+
+	return position;
 }

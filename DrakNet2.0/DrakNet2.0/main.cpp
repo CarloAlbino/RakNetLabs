@@ -19,10 +19,21 @@
 
 #include <time.h>
 
+enum EDirection
+{
+	ED_North, 
+	ED_East,
+	ED_South, 
+	ED_West,
+	ED_Weast,
+	ED_DirectionLength
+};
+
 // Stores user position to be passed into the bitstream
 struct SPos
 {
 	float x, y, z;
+	EDirection dir;
 };
 
 // States a user can be in
@@ -215,7 +226,31 @@ int main(void)
 				bs.Write(randPos);
 				bs.Write(userName);
 
-				printf("%s pos x: %f - pos y: %f - pos z: %f\n", userName, randPos.x, randPos.y, randPos.z);
+				char direction[30] = " facing -> ";
+
+				switch (randPos.dir)
+				{
+				case ED_North:
+					strcat(direction, "North");
+					break;
+				case ED_East:
+					strcat(direction, "East");
+					break;
+				case ED_South:
+					strcat(direction, "South");
+					break;
+				case ED_West:
+					strcat(direction, "West");
+					break;
+				case ED_Weast:
+					strcat(direction, "Weast");
+					break;
+				default:
+					strcat(direction, "Unknown");
+					break;
+				}
+
+				printf("%s pos x -> %f - pos y -> %f - pos z -> %f - %s\n", userName, randPos.x, randPos.y, randPos.z, direction);
 				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
 
 				continue;
@@ -347,7 +382,31 @@ int main(void)
 				char name[30];
 				bs.Read(name);
 
-				printf("%s pos x: %f - pos y: %f - pos z: %f\n", name, newPos.x, newPos.y, newPos.z);
+				char direction[30] = " facing -> ";
+
+				switch (newPos.dir)
+				{
+				case ED_North:
+					strcat(direction, "North");
+					break;
+				case ED_East:
+					strcat(direction, "East");
+					break;
+				case ED_South:
+					strcat(direction, "South");
+					break;
+				case ED_West:
+					strcat(direction, "West");
+					break;
+				case ED_Weast:
+					strcat(direction, "Weast");
+					break;
+				default:
+					strcat(direction, "Unknown");
+					break;
+				}
+
+				printf("%s pos x -> %f - pos y -> %f - pos z -> %f - %s\n", name, newPos.x, newPos.y, newPos.z, direction);
 			}
 				
 				break;
@@ -452,6 +511,9 @@ SPos GetRandomPos()
 
 	randomNum = rand() % 100 + 1;
 	position.z = randomNum;
+
+	randomNum = rand() % ED_DirectionLength;
+	position.dir = EDirection(randomNum);
 
 	return position;
 }

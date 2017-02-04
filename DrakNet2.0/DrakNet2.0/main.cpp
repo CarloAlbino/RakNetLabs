@@ -19,31 +19,43 @@
 
 #include <time.h>
 
-
+// Stores user position to be passed into the bitstream
 struct SPos
 {
 	float x, y, z;
 };
 
+// States a user can be in
+enum EState
+{
+	ES_Idle,
+	ES_Walking, 
+	ES_Lost,
+	ES_StateLength
+};
+
 unsigned char GetPacketIdentifier(RakNet::Packet *p);
 int CheckForCommands(char* message);
 SPos GetRandomPos();
+EState GetRandomState();
 
 RakNet::RakPeerInterface *g_rakPeerInterface;	// Used to connect users together
 bool g_isServer = false;
 RakNet::SystemAddress g_serverAddress = RakNet::UNASSIGNED_SYSTEM_ADDRESS;	// Default server address
 
-enum UserINputResult
+enum UserInputResult
 {
 	UIR_BREAK,
 	UIR_CONTINUE, 
 	UIR_POS, 
+	UIR_STATE,
 	UIR_COUNT,
 };
 
 enum {
    ID_GB3_CHAT = ID_USER_PACKET_ENUM,
    ID_GB3_POS,
+   ID_GB3_STATE,
 };
 
 int main(void)
@@ -162,15 +174,8 @@ int main(void)
 
 	printf("\nMy GUID is %s\n", g_rakPeerInterface->GetGuidFromSystemAddress(RakNet::UNASSIGNED_SYSTEM_ADDRESS).ToString());
 	puts("\n===============================================================\n");
-	puts("\n\n[ISTRUCTIONS]\n");
-	if (g_isServer)
-	{
-		puts("'quit' to quit. 'stat' to show stats. 'ping' to ping.\n'pingip' to ping an ip address\n'ban' to ban an IP from connecting.\n'kick to kick the first connected player.\nType to talk.\n\n");
-	}
-	else
-	{
-		puts("'quit' to quit. 'stat' to show stats. \nType to talk.\n\n");
-	}
+	puts("\n\n[INSTRUCTIONS]\n");
+	puts("'quit' to quit. \n'pos' to show your position. \n'state' to show your current state. \nType to talk.\n\n");
 	puts("\n===============================================================\n");
 
 	char message[2046];
@@ -203,39 +208,59 @@ int main(void)
 			}
 			else if (result == UIR_POS)
 			{
+				// Send your position to the server, also prints your position for you to see
 				RakNet::BitStream bs;
 				bs.Write((unsigned char)ID_GB3_POS);
-				bs.Write(GetRandomPos());
+				SPos randPos = GetRandomPos();
+				bs.Write(randPos);
 				bs.Write(userName);
 
-				if (g_isServer)
+				printf("%s pos x: %f - pos y: %f - pos z: %f\n", userName, randPos.x, randPos.y, randPos.z);
+				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+
+				continue;
+			}
+			else if (result == UIR_STATE)
+			{
+				// Send your state to the server, also print your state for you to see
+				RakNet::BitStream bs;
+				bs.Write((unsigned char)ID_GB3_STATE);
+				EState randState = GetRandomState();
+				bs.Write(randState);
+				bs.Write(userName);
+
+				char state[30] = " state -> ";
+
+				switch (randState)
 				{
-					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+				case ES_Idle:
+					strcat(state, "Idle");
+					break;
+				case ES_Walking:
+					strcat(state, "Walking");
+					break;
+				case ES_Lost:
+					strcat(state, "Lost");
+					break;
+				default:
+					strcat(state, "Unknown");
+					break;
 				}
-				else
-				{
-					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, g_serverAddress, false);
-				}
+
+				printf("%s %s\n", userName, state);
+
+				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+
 				continue;
 			}
 			else
 			{
-				// Notice what is not here: something to keep our network running.  It's
-				// fine to block on gets or anything we want
-				// Because the network engine was painstakingly written using threads.
+				// Send a normal message
 				msgWithIdentifier[0] = ID_GB3_CHAT;
 				msgWithIdentifier[1] = '\0';
 				strncat(msgWithIdentifier, userName, sizeof(msgWithIdentifier));
 				strncat(msgWithIdentifier, message, sizeof(message) - strlen(userName) - 1);
-				// Append Server: to the message so clients know that it ORIGINATED from the server
-				// All messages to all clients come from the server either directly or by being
-				// relayed from other clients
-				//msgWithIdentifier[0] = 0;
-				//const static char prefix[] = ;
-				//strncat(msgWithIdentifier, userName, sizeof(msgWithIdentifier));
-				//strncat(msgWithIdentifier, message, sizeof(msgWithIdentifier) - strlen(userName) - 1);
 
-				// message2 is the data to send
 				// strlen(message2)+1 is to send the null terminator
 				// HIGH_PRIORITY doesn't actually matter here because we don't use any other priority
 				// RELIABLE_ORDERED means make sure the message arrives in the right order
@@ -315,7 +340,6 @@ int main(void)
 				break;
 			case ID_GB3_POS:
 			{
-				printf("ID_GB3_POS\n");
 				RakNet::BitStream bs(packet->data, packet->length, false);
 				bs.IgnoreBytes(sizeof(RakNet::MessageID));
 				SPos newPos;
@@ -327,19 +351,39 @@ int main(void)
 			}
 				
 				break;
+			case ID_GB3_STATE:
+			{
+				RakNet::BitStream bs(packet->data, packet->length, false);
+				bs.IgnoreBytes(sizeof(RakNet::MessageID));
+				EState newState;
+				bs.Read(newState);
+				char name[30];
+				bs.Read(name);
+				char state[30] = " state -> ";
+
+				switch (newState)
+				{
+				case ES_Idle:
+					strcat(state, "Idle");
+					break;
+				case ES_Walking:
+					strcat(state, "Walking");
+					break;
+				case ES_Lost:
+					strcat(state, "Lost");
+					break;
+				default:
+					strcat(state, "Unknown");
+					break;
+				}
+
+				printf("%s %s\n", name, state);
+			}
+				break;
 			default:
 				// The server knows the static data of all clients, so we can prefix the message
 				// With the name data
 				printf("%i\n", packet->data[0]);
-
-				// Relay the message.  We prefix the name for other clients.  This demonstrates
-				// That messages can be changed on the server before being broadcast
-				// Sending is the same as before
-				/*sprintf(message, "%s", packet->data);
-				if (g_isServer)
-				{
-					g_rakPeerInterface->Send(message, (const int)strlen(message) + 1, HIGH_PRIORITY, RELIABLE_ORDERED, 0, packet->systemAddress, true);
-				}*/
 
 				break;
 			}
@@ -385,9 +429,15 @@ int CheckForCommands(char* message)
 		return UIR_POS;
 	}
 
+	if (strcmp(message, "state") == 0)
+	{
+		return UIR_STATE;
+	}
+
 	return UIR_COUNT;
 }
 
+// Creates a random position for a user to be at
 SPos GetRandomPos()
 {
 	SPos position;
@@ -404,4 +454,15 @@ SPos GetRandomPos()
 	position.z = randomNum;
 
 	return position;
+}
+
+// Return a random state
+EState GetRandomState()
+{
+	int randomNum;
+	srand(time(NULL));
+
+	randomNum = rand() % ES_StateLength;
+
+	return EState(randomNum);
 }

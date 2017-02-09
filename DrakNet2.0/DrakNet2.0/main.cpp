@@ -18,6 +18,7 @@ enum ReadyEventIDs
 {
 	ID_RE_PLAYER_JOIN = 0,
 	ID_RE_GAME_OVER,
+	ID_RE_PLAY_AGAIN
 };
 
 void PacketListener();
@@ -106,6 +107,10 @@ int main()
 
 	// Ask for confirmation to start the game
 	g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, g_rakPeerInterface->GetMyGUID());
+	// Ask for confirmation that the game is over
+	g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, g_rakPeerInterface->GetMyGUID());
+	// Ask for confirmation to play the game again
+	g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, g_rakPeerInterface->GetMyGUID());
 
 	printf("I have one question...\n");
 	printf("ARE YOU READY TO GUESS NUMBERS!!!??!?!?!?!?!??!\n");
@@ -146,6 +151,8 @@ void NumberGuessing()
 			if (g_numberAnswer <= 0)
 			{
 				g_numberAnswer = GetRandomNumber(MIN_NUM, MAX_NUM);
+				g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, false);
+				g_readyEventPlugin.SetEvent(ID_RE_PLAY_AGAIN, false);
 			}
 
 			// Main display
@@ -153,7 +160,7 @@ void NumberGuessing()
 			printf("################################\n\n");
 			printf("Welcome to number guessing game.\n\n");
 			printf("################################\n\n");
-			printf("Please guess a number between %i - %i\n\n", MIN_NUM, MAX_NUM);
+			printf("%s\nPlease guess a number between %i - %i\n\n", g_userName, MIN_NUM, MAX_NUM);
 			printf("Current number of guesses: %i\n\n", g_numberOfGuesses);
 			printf("################################\n\n");
 
@@ -163,14 +170,16 @@ void NumberGuessing()
 				if (g_prevGuess > g_numberAnswer)
 				{
 					// Guess is too high
-					printf("%i is too high. Guess again:\n", g_prevGuess);
+					printf("%i is too high. Guess again.\n", g_prevGuess);
 				}
 				else
 				{
 					// Guess is too low
-					printf("%i is too low. Guess again:\n", g_prevGuess);
+					printf("%i is too low. Guess again.\n", g_prevGuess);
 				}
 			}
+
+			printf("YOUR GUESS: \n");
 
 			// Guess
 			char numberGuessChar[32];
@@ -199,10 +208,8 @@ void NumberGuessing()
 				bs.Write(g_numberOfGuesses);
 				// Broadcast packet to all players
 				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
-				printf("\nWaiting for the other players to finish the game...\n\n");
-				// Ask for permission to end the game
-				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, g_rakPeerInterface->GetMyGUID());
-				// Set ready event to start the game
+
+				// Set ready event to Game Over
 				g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, true);
 				
 				// Player has finished the game.  Ignore further input until all players are done.
@@ -227,6 +234,22 @@ void NumberGuessing()
 				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 			}
 		}
+
+		if (!g_isGameRunning)
+		{
+			// if a game has already been played
+			if (g_numberOfGuesses > 0)
+			{
+				// Reset values for a new game
+				g_numberAnswer = 0;
+				g_numberOfGuesses = 0;
+				g_prevGuess = 0;
+
+				// Ask for confirmation that the game is over
+				printf("\nWaiting for the other players to finish the game...\n\n");
+				//g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, g_rakPeerInterface->GetMyGUID());
+			}
+		}
 	}
 }
 
@@ -248,16 +271,23 @@ void PacketListener()
 			case ID_CONNECTION_REQUEST_ACCEPTED:
 				printf("     ID_CONNECTION_REQUEST_ACCEPTED\n");
 				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, packet->guid);
 				break;
 			case ID_CONNECTION_ATTEMPT_FAILED:
 				printf("     ID_CONNECTION_ATTEMPT_FAILED\n");
 				break;
 			case ID_ALREADY_CONNECTED:
 				printf("     ID_ALREADY_CONNECTED\n");
+				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, packet->guid);
 				break;
 			case ID_NEW_INCOMING_CONNECTION:
 				printf("     ID_NEW_INCOMING_CONNECTION\n");
 				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, packet->guid);
 				break;
 			case ID_NO_FREE_INCOMING_CONNECTIONS:
 				printf("     ID_NO_FREE_INCOMING_CONNECTIONS\n");
@@ -272,14 +302,39 @@ void PacketListener()
 					bs.IgnoreBytes(sizeof(MessageID));
 					int readyEventId;
 					bs.Read(readyEventId);
+					// Player's joining
 					if (readyEventId == ID_RE_PLAYER_JOIN && !g_isGameRunning)
 					{
+						printf("     Event: player join\n");
 						g_isGameRunning = true;
 					}
-					if (readyEventId == ID_RE_GAME_OVER && g_isGameRunning)
+					// All player's have completed the game
+					if (readyEventId == ID_RE_GAME_OVER)
 					{
-						printf("All players have finished. Quitting...\n");
-						g_isRunning = false;
+						printf("     Event: Gameover\n");
+						printf("All players have finished. Do you want to play again?\nEnter 'y' to play again\nEnter anything else to quit.\n");
+
+						char answer[32];
+						Gets(answer, sizeof(answer));
+						if (answer[0] == 'y' || answer[0] == 'Y')
+						{
+							// Set ready event to play again
+							g_readyEventPlugin.SetEvent(ID_RE_PLAY_AGAIN, true);
+							g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, false);
+							printf("Waiting for all players to be ready for a new game...");
+						}
+						else
+						{
+							printf("Quitting...");
+							g_isRunning = false;
+						}
+					}
+					// Player's want to start a new game
+					if (readyEventId == ID_RE_PLAY_AGAIN)
+					{
+						printf("     Event: play again\n");
+						printf("LET'S PLAY AGAIN!");
+						g_isGameRunning = true;
 					}
 				}
 				break;
@@ -301,8 +356,12 @@ void PacketListener()
 				int numOfGuesses;
 				bs.Read(numOfGuesses);
 				// Print feedback
-				printf("  %s is trying to guess the number %i\nThey guessed...%i\nThey have guessed %i times.\n", userName, answer, guess, numOfGuesses);
-				printf("YOUR GUESS: ");
+				printf("  %s is trying to guess the number %i\n  They guessed...%i\n  They have guessed %i times.\n", userName, answer, guess, numOfGuesses);
+				if (g_isGameRunning)
+				{
+					// Remind the player that they can type in their answer anytime
+					printf("YOUR GUESS: \n");
+				}
 			}
 			break;
 			case ID_GB3_CORRECT_GUESS:
@@ -319,7 +378,11 @@ void PacketListener()
 				bs.Read(numOfGuesses);
 				// Print feedback
 				printf("  %s guessed the number %i in %i guesses. They have finished the game.\n", userName, answer, numOfGuesses);
-				printf("YOUR GUESS: ");
+				if (g_isGameRunning)
+				{
+					// Remind the player that they can type in their answer anytime
+					printf("YOUR GUESS: \n");
+				}
 			}
 				break;
 			default:

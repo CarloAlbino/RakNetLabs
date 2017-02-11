@@ -29,6 +29,7 @@ RakPeerInterface* g_rakPeerInterface = nullptr;
 int g_startingPort = 6500;
 bool g_isRunning = true;
 bool g_isGameRunning = false;
+bool g_isWaitingForNewGame = false;
 
 // For guessing game
 const int MIN_NUM = 1;
@@ -151,8 +152,13 @@ void NumberGuessing()
 			if (g_numberAnswer <= 0)
 			{
 				g_numberAnswer = GetRandomNumber(MIN_NUM, MAX_NUM);
-				g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, false);
-				g_readyEventPlugin.SetEvent(ID_RE_PLAY_AGAIN, false);
+				// Reset the game after playing at least 1 game previously
+				if (g_isWaitingForNewGame)
+				{
+					g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, false);
+					g_readyEventPlugin.SetEvent(ID_RE_PLAY_AGAIN, false);
+					g_isWaitingForNewGame = false;
+				}
 			}
 
 			// Main display
@@ -247,7 +253,6 @@ void NumberGuessing()
 
 				// Ask for confirmation that the game is over
 				printf("\nWaiting for the other players to finish the game...\n\n");
-				//g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, g_rakPeerInterface->GetMyGUID());
 			}
 		}
 	}
@@ -308,9 +313,16 @@ void PacketListener()
 						printf("     Event: player join\n");
 						g_isGameRunning = true;
 					}
-					// All player's have completed the game
-					if (readyEventId == ID_RE_GAME_OVER)
+					if (readyEventId == ID_RE_PLAY_AGAIN && g_isWaitingForNewGame)
 					{
+						// Player's want to start a new game
+						printf("     Event: play again\n");
+						printf("LET'S PLAY AGAIN!\n");
+						g_isGameRunning = true;
+					}
+					if (readyEventId == ID_RE_GAME_OVER && !g_isWaitingForNewGame)
+					{
+						// All player's have completed the game
 						printf("     Event: Gameover\n");
 						printf("All players have finished. Do you want to play again?\nEnter 'y' to play again\nEnter anything else to quit.\n");
 
@@ -320,21 +332,14 @@ void PacketListener()
 						{
 							// Set ready event to play again
 							g_readyEventPlugin.SetEvent(ID_RE_PLAY_AGAIN, true);
-							g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, false);
-							printf("Waiting for all players to be ready for a new game...");
+							printf("Waiting for all players to be ready for a new game...\n");
+							g_isWaitingForNewGame = true;
 						}
 						else
 						{
 							printf("Quitting...");
 							g_isRunning = false;
 						}
-					}
-					// Player's want to start a new game
-					if (readyEventId == ID_RE_PLAY_AGAIN)
-					{
-						printf("     Event: play again\n");
-						printf("LET'S PLAY AGAIN!");
-						g_isGameRunning = true;
 					}
 				}
 				break;

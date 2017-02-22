@@ -6,49 +6,47 @@
 #include "ConnectionGraph2.h"
 #include "Gets.h"
 #include <thread>
+#include <vector>
+#include "NetRacer.h"
+#include <mutex>
 
 using namespace RakNet;
 
 enum {
-	ID_GB3_NUMBER_GUESS = ID_USER_PACKET_ENUM,
-	ID_GB3_CORRECT_GUESS
+	ID_GB3_CREATE_RACER = ID_USER_PACKET_ENUM,
+	ID_GB3_ACCELERATE,
+	ID_GB3_BRAKE,
 };
 
 enum ReadyEventIDs
 {
 	ID_RE_PLAYER_JOIN = 0,
 	ID_RE_GAME_OVER,
-	ID_RE_PLAY_AGAIN
 };
 
+void RacerUpdate();
 void PacketListener();
-void NumberGuessing();
-int GetRandomNumber(int min, int max);
+void InputListener();
+void DisplayHelp();
 
 RakPeerInterface* g_rakPeerInterface = nullptr;
 int g_startingPort = 6500;
 bool g_isRunning = true;
 bool g_isGameRunning = false;
-bool g_isWaitingForNewGame = false;
 
-// For guessing game
-const int MIN_NUM = 1;
-const int MAX_NUM = 20;
-int g_numberAnswer = 0;
-int g_numberOfGuesses = 0;
-char g_userName[32] = "Player";
-int g_prevGuess = 0;
+std::mutex g_racerMutex;
+
+std::vector<CNetRacer*> g_racers;
 
 // Allows for ready events
 ReadyEvent g_readyEventPlugin;
 // These two plugins are just to automatically create a fully connected mesh so I don't have to call connect more than once
 FullyConnectedMesh2 g_fcm2;
 ConnectionGraph2 g_cg2;
+RakNet::NetworkIDManager g_networkIDManager;
 
 int main()
 {
-	srand(time(NULL));
-
 	// Set up rak peer interface
 	g_rakPeerInterface = RakPeerInterface::GetInstance();
 
@@ -78,19 +76,19 @@ int main()
 	}
 	g_rakPeerInterface->SetMaximumIncomingConnections(maxConnections);
 
-	printf("Raknet has started!! Started Port: %i\n", g_startingPort);
+	printf("We done it, raknet has started!! Started Port: %i\n", g_startingPort);
 
-	printf("Started listening for packets.. \n");
+	printf("Start listening for packets.. \n");
 	std::thread packetListenerThread(PacketListener);
 
 	// Start interacting with user
-	printf("Press y to connect to a game that has been started.\nPress anything else to start a new instance of the game.\n");
+	printf("Press y to connect to a game that has been started.  Press anything else to start a new instance of the game.\n");
 	char userInput[32];
 	Gets(userInput, sizeof(userInput));
 	if (userInput[0] == 'y' || userInput[0] == 'Y')
 	{
-		printf("Time to connect..\n");
-		printf("Please enter the port to connect to\n");
+		printf("Time to connect.....four\n");
+		printf("please enter the port to connect to\n");
 		char port[32];
 		Gets(port, sizeof(port));
 		int portNum = atoi(port);
@@ -108,154 +106,131 @@ int main()
 
 	// Ask for confirmation to start the game
 	g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, g_rakPeerInterface->GetMyGUID());
-	// Ask for confirmation that the game is over
-	g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, g_rakPeerInterface->GetMyGUID());
-	// Ask for confirmation to play the game again
-	g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, g_rakPeerInterface->GetMyGUID());
 
 	printf("I have one question...\n");
-	printf("ARE YOU READY TO GUESS NUMBERS!!!??!?!?!?!?!??!\n");
-	printf("Type in y followed by enter if you are ready: \n\n");
+	printf("ARE YOU READY TO RACE!!!??!?!?!?!?!??!\n");
+	printf("Type in y followed by enter if you are ready\n\n");
 	Gets(userInput, sizeof(userInput));
 	if (userInput[0] == 'y' || userInput[0] == 'Y')
 	{
-		// Ask for user name
-		printf("GREAT!\nEnter your name:\n");
-		Gets(g_userName, sizeof(g_userName));
-		char temp[2] = "[";
-		strcat(temp, g_userName);
-		strcat(temp, "]");
-		strcpy(g_userName, temp);
+		CNetRacer*  racer = new CNetRacer();
+		racer->SetIsMaster(true);
+		racer->SetNetworkIDManager(&g_networkIDManager);
+		// inserting our racer at the beginning of the vector in order to have easy access later on
+		// g_racers[0] is our racer
+		g_racerMutex.lock();
+		g_racers.insert(g_racers.begin(), racer);
+		g_racerMutex.unlock();
 
 		// Set ready event to start the game
 		g_readyEventPlugin.SetEvent(ID_RE_PLAYER_JOIN, true);
-		std::thread numberGuessThread(NumberGuessing);
+		std::thread inputListenerThread(InputListener);
+		std::thread racerUpdateThread(RacerUpdate);
 		// this will make the program wait until the thread below is done executing
 		packetListenerThread.join();
 	}
 	else
 	{
 		g_isRunning = false;
-		printf("We understand..not everybody..is....ready\n");
+		printf("we understand..not everybody..is....ready\n");
 	}
 
 	return 0;
 }
 
-void NumberGuessing()
+void RacerUpdate()
 {
+	printf("Welcome to Net Racer!\n");
 	while (g_isRunning)
 	{
 		while (g_isGameRunning)
 		{
-			// Get a random number if none has been chosen
-			if (g_numberAnswer <= 0)
+			g_racerMutex.lock();
+			for each(CNetRacer* racer in g_racers)
 			{
-				g_numberAnswer = GetRandomNumber(MIN_NUM, MAX_NUM);
-				// Reset the game after playing at least 1 game previously
-				if (g_isWaitingForNewGame)
-				{
-					g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, false);
-					g_readyEventPlugin.SetEvent(ID_RE_PLAY_AGAIN, false);
-					g_isWaitingForNewGame = false;
-				}
+				racer->Update();
 			}
-
-			// Main display
-			system("cls");
-			printf("################################\n\n");
-			printf("Welcome to number guessing game.\n\n");
-			printf("################################\n\n");
-			printf("%s\nPlease guess a number between %i - %i\n\n", g_userName, MIN_NUM, MAX_NUM);
-			printf("Current number of guesses: %i\n\n", g_numberOfGuesses);
-			printf("################################\n\n");
-
-			// If there has been a preveious guess.  This is player feedback for incorrect answers.
-			if (g_numberOfGuesses > 0)
-			{
-				if (g_prevGuess > g_numberAnswer)
-				{
-					// Guess is too high
-					printf("%i is too high. Guess again.\n", g_prevGuess);
-				}
-				else
-				{
-					// Guess is too low
-					printf("%i is too low. Guess again.\n", g_prevGuess);
-				}
-			}
-
-			printf("YOUR GUESS: \n");
-
-			// Guess
-			char numberGuessChar[32];
-			Gets(numberGuessChar, sizeof(numberGuessChar));
-			int guess = atoi(numberGuessChar);
-
-			// Add a guess
-			g_numberOfGuesses++;
-
-			// We have a guess, broadcast it to other players
-			BitStream bs;
-
-			// Process results locally, then braodcast to other players
-			if (atoi(numberGuessChar) == g_numberAnswer)
-			{
-				// Guessed correctly
-				// Write packet for a correct guess
-				printf("CORRECT!\nThe answer was %i!\nYou guessed it in %i guesses.", g_numberAnswer, g_numberOfGuesses);
-				// Broadcast that the answer is correct
-				bs.Write((unsigned char)ID_GB3_CORRECT_GUESS);
-				// Write user name to packet
-				bs.Write(g_userName);
-				// Write answer to packet
-				bs.Write(g_numberAnswer);
-				// Write number of guesses to packet
-				bs.Write(g_numberOfGuesses);
-				// Broadcast packet to all players
-				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
-
-				// Set ready event to Game Over
-				g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, true);
-				
-				// Player has finished the game.  Ignore further input until all players are done.
-				g_isGameRunning = false;
-			}
-			else
-			{
-				// Save guess for later use
-				g_prevGuess = atoi(numberGuessChar);
-
-				// Write packet for a false guess
-				bs.Write((unsigned char)ID_GB3_NUMBER_GUESS);
-				// Write user name to packet
-				bs.Write(g_userName);
-				// Write answer to packet
-				bs.Write(g_numberAnswer);
-				// Write guess to packet
-				bs.Write(guess);
-				// Write number of guesses to packet
-				bs.Write(g_numberOfGuesses);
-				// Broadcast packet to all players
-				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
-			}
+			g_racerMutex.unlock();
 		}
-
-		if (!g_isGameRunning)
-		{
-			// if a game has already been played
-			if (g_numberOfGuesses > 0)
-			{
-				// Reset values for a new game
-				g_numberAnswer = 0;
-				g_numberOfGuesses = 0;
-				g_prevGuess = 0;
-
-				// Ask for confirmation that the game is over
-				printf("\nWaiting for the other players to finish the game...\n\n");
-			}
-		}
+		Sleep(100);
 	}
+}
+
+void InputListener()
+{
+	static char* accelerate = "go";
+	static char* brake = "stop";
+	static char* stats = "stats";
+	static char* help = "help";
+	static char* quit = "quit";
+
+	DisplayHelp();
+
+	while (g_isRunning)
+	{
+		while (g_isGameRunning)
+		{
+			char input[32];
+			Gets(input, sizeof(input));
+			system("cls");
+
+			if (strcmp(input, accelerate) == 0)
+			{
+				printf("Accelerating..\n");
+				g_racers[0]->Accelerate();
+
+				// Send packet telling the world we are accelerating
+				BitStream bs;
+				bs.Write((unsigned char)ID_GB3_ACCELERATE);
+				bs.Write(g_racers[0]->GetNetworkID());
+				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+			}
+			else if (strcmp(input, brake) == 0)
+			{
+				printf("Braking..\n");
+				g_racers[0]->Brake();
+
+				// Send packet telling the world we are braking
+				BitStream bs;
+				bs.Write((unsigned char)ID_GB3_BRAKE);
+				bs.Write(g_racers[0]->GetNetworkID());
+				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+			}
+			else if (strcmp(input, stats) == 0)
+			{
+				g_racerMutex.lock();
+				for each(CNetRacer* racer in g_racers)
+				{
+					racer->DisplayStats();
+				}
+				g_racerMutex.unlock();
+			}
+			else if (strcmp(input, help) == 0)
+			{
+				DisplayHelp();
+			}
+			else if (strcmp(input, quit) == 0)
+			{
+				printf("Quitting..\n");
+				g_isGameRunning = false;
+				g_isRunning = false;
+			}
+		}
+		Sleep(100);
+	}
+}
+
+void DisplayHelp()
+{
+	printf("************************************************\n");
+	printf("******************RACER STATS*******************\n");
+	printf("'go' = Accelerate\n");
+	printf("'stop' = Brake\n");
+	printf("'stats'  = Racer Stats\n");
+	printf("'help' = This\n");
+	printf("'quit'  = Quit game\n");
+	printf("************************************************\n");
+	printf("************************************************\n");
 }
 
 void PacketListener()
@@ -274,133 +249,99 @@ void PacketListener()
 			switch (packetIdentifier)
 			{
 			case ID_CONNECTION_REQUEST_ACCEPTED:
-				printf("     ID_CONNECTION_REQUEST_ACCEPTED\n");
+				printf("ID_CONNECTION_REQUEST_ACCEPTED\n");
 				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
-				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
-				g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, packet->guid);
 				break;
 			case ID_CONNECTION_ATTEMPT_FAILED:
-				printf("     ID_CONNECTION_ATTEMPT_FAILED\n");
+				printf("ID_CONNECTION_ATTEMPT_FAILED\n");
 				break;
 			case ID_ALREADY_CONNECTED:
-				printf("     ID_ALREADY_CONNECTED\n");
-				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
-				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
-				g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, packet->guid);
+				printf("ID_ALREADY_CONNECTED\n");
 				break;
 			case ID_NEW_INCOMING_CONNECTION:
-				printf("     ID_NEW_INCOMING_CONNECTION\n");
+				printf("ID_NEW_INCOMING_CONNECTION\n");
 				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
-				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
-				g_readyEventPlugin.AddToWaitList(ID_RE_PLAY_AGAIN, packet->guid);
 				break;
 			case ID_NO_FREE_INCOMING_CONNECTIONS:
-				printf("     ID_NO_FREE_INCOMING_CONNECTIONS\n");
+				printf("ID_NO_FREE_INCOMING_CONNECTIONS\n");
 				break;
 			case ID_READY_EVENT_SET:
-				printf("     ID_READY_EVENT_SET\n");
+				printf("ID_READY_EVENT_SET\n");
 				break;
 			case ID_READY_EVENT_ALL_SET:
-				printf("     ID_READY_EVENT_ALL_SET\n");
+				printf("ID_READY_EVENT_ALL_SET\n");
 				{
 					BitStream bs(packet->data, packet->length, false);
 					bs.IgnoreBytes(sizeof(MessageID));
 					int readyEventId;
 					bs.Read(readyEventId);
-					// Player's joining
 					if (readyEventId == ID_RE_PLAYER_JOIN && !g_isGameRunning)
 					{
-						printf("     Event: player join\n");
 						g_isGameRunning = true;
-					}
-					if (readyEventId == ID_RE_PLAY_AGAIN && g_isWaitingForNewGame)
-					{
-						// Player's want to start a new game
-						printf("     Event: play again\n");
-						printf("LET'S PLAY AGAIN!\n");
-						g_isGameRunning = true;
-					}
-					if (readyEventId == ID_RE_GAME_OVER && !g_isWaitingForNewGame)
-					{
-						// All player's have completed the game
-						printf("     Event: Gameover\n");
-						printf("All players have finished. Do you want to play again?\nEnter 'y' to play again\nEnter anything else to quit.\n");
 
-						char answer[32];
-						Gets(answer, sizeof(answer));
-						if (answer[0] == 'y' || answer[0] == 'Y')
-						{
-							// Set ready event to play again
-							g_readyEventPlugin.SetEvent(ID_RE_PLAY_AGAIN, true);
-							printf("Waiting for all players to be ready for a new game...\n");
-							g_isWaitingForNewGame = true;
-						}
-						else
-						{
-							printf("Quitting...");
-							g_isRunning = false;
-						}
+						BitStream bs;
+						bs.Write((unsigned char)ID_GB3_CREATE_RACER);
+						bs.Write(g_racers[0]->GetNetworkID());
+						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 					}
 				}
 				break;
 			case ID_READY_EVENT_UNSET:
-				printf("     ID_READY_EVENT_UNSET\n");
+				printf("ID_READY_EVENT_UNSET\n");
 				break;
-			case ID_GB3_NUMBER_GUESS:
+			case ID_GB3_CREATE_RACER:
 			{
-				// Other user has guess a number
+				printf("creating replica...\n");
 				BitStream bs(packet->data, packet->length, false);
 				bs.IgnoreBytes(sizeof(MessageID));
-				// Read all the data passed in with the packet
-				char userName[sizeof(g_userName)];
-				bs.Read(userName);
-				int answer;
-				bs.Read(answer);
-				int guess;
-				bs.Read(guess);
-				int numOfGuesses;
-				bs.Read(numOfGuesses);
-				// Print feedback
-				printf("  %s is trying to guess the number %i\n  They guessed...%i\n  They have guessed %i times.\n", userName, answer, guess, numOfGuesses);
-				if (g_isGameRunning)
+				NetworkID netID;
+				bs.Read(netID);
+
+				CNetRacer* racer = new CNetRacer();
+				racer->SetIsMaster(false);
+				racer->SetNetworkIDManager(&g_networkIDManager);
+				racer->SetNetworkID(netID);
+				g_racerMutex.lock();
+				g_racers.push_back(racer);
+				g_racerMutex.unlock();
+			}
+			break;
+			case ID_GB3_ACCELERATE:
+			{
+				BitStream bs(packet->data, packet->length, false);
+				bs.IgnoreBytes(sizeof(MessageID));
+				NetworkID netID;
+				bs.Read(netID);
+
+				CNetRacer* racer = g_networkIDManager.GET_OBJECT_FROM_ID<CNetRacer*>(netID);
+				if (racer)
 				{
-					// Remind the player that they can type in their answer anytime
-					printf("YOUR GUESS: \n");
+					racer->Accelerate();
+				}
+			}
+				break;
+
+			case ID_GB3_BRAKE:
+			{
+				BitStream bs(packet->data, packet->length, false);
+				bs.IgnoreBytes(sizeof(MessageID));
+				NetworkID netID;
+				bs.Read(netID);
+
+				CNetRacer* racer = g_networkIDManager.GET_OBJECT_FROM_ID<CNetRacer*>(netID);
+				if (racer)
+				{
+					racer->Brake();
 				}
 			}
 			break;
-			case ID_GB3_CORRECT_GUESS:
-			{
-				// Other user has guessed correctly
-				BitStream bs(packet->data, packet->length, false);
-				bs.IgnoreBytes(sizeof(MessageID));
-				// Read all the data passed in with the packet
-				char userName[sizeof(g_userName)];
-				bs.Read(userName);
-				int answer;
-				bs.Read(answer);
-				int numOfGuesses;
-				bs.Read(numOfGuesses);
-				// Print feedback
-				printf("  %s guessed the number %i in %i guesses. They have finished the game.\n", userName, answer, numOfGuesses);
-				if (g_isGameRunning)
-				{
-					// Remind the player that they can type in their answer anytime
-					printf("YOUR GUESS: \n");
-				}
-			}
-				break;
 			default:
-				printf("     Packet received %i\n", packetIdentifier);
+				printf("Packet received %i Gs\n", packetIdentifier);
 				break;
 			}
 		}
+		Sleep(100);
 	}
 }
 
-int GetRandomNumber(int min, int max)
-{
-	srand(time(NULL));
 
-	return rand() % max + min;
-}

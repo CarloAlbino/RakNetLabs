@@ -1,15 +1,28 @@
 #pragma once
 #include "NetworkIDManager.h"
 
+enum CharacterClasses
+{
+	E_CCSamurai,
+	E_CCWrestler,
+	E_CCGrifter,
+	E_CCManager
+};
+
 class Character : public RakNet::NetworkIDObject
 {
 public:
-	void SetTarget(int ID);
+	void SetTarget(RakNet::NetworkID ID);
+	int GetTarget();
+	char* GetName();
+	CharacterClasses GetClass();
 
 	virtual void UseAttack() = 0;
 	virtual void UseHeal() = 0;
 	virtual void UseDodge() = 0;
 	virtual void UseSpecial() = 0;
+
+	bool CanAttack();
 
 	int GetHealth();
 	void SetDamage(int damage);
@@ -18,7 +31,7 @@ public:
 	int GetDefence();
 	void SetDefence(int defence);
 	int GetAttack();
-	void SetAttack();
+	void SetAttack(int attack);
 
 	void ResetStats();
 	void DisplayStats();
@@ -27,19 +40,21 @@ public:
 	bool IsMaster() const;
 
 protected:
+	char* GetCharClassName(CharacterClasses c);
+
+protected:
+	char* m_name;
+	CharacterClasses m_class;
+	RakNet::NetworkID m_currentTarget;
+
 	int m_maxHealth;
 	int m_health;
-
-	int m_maxDefence;
+	int m_defaultDefence;
 	int m_defence;
-
-	int m_maxSpeed;
+	int m_defaultSpeed;
 	int m_speed;
-
-	int m_maxAttack;
+	int m_defaultAttack;
 	int m_attack;
-	
-	int m_currentTarget;
 
 	bool m_isMaster;
 };

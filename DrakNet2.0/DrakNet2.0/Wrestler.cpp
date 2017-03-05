@@ -1,5 +1,4 @@
 #include "Wrestler.h"
-#include <stdio.h>
 
 Wrestler::Wrestler(char * name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
 {
@@ -46,7 +45,7 @@ void Wrestler::UseAttack()
 
 void Wrestler::UseHeal()
 {
-	int healPercent = (float)m_maxHealth * 2.2f;
+	int healPercent = (float)m_maxHealth * 0.22f;
 	printf("You pretended to be hurt while your enemies thought they were winning. \nYou healed yourself for %i health.\n", healPercent);
 	SetDamage(healPercent);
 }
@@ -56,5 +55,9 @@ void Wrestler::UseSpecial(RakNet::NetworkID playerIDs[], int size)
 	printf("The crowd is cheering you on, your speed and attack doubled!\n");
 	m_spTurnsRemaining = 3;
 	m_attack *= 2;
-	m_speed *= 2;
+	m_speed *= 1.5f;
+
+	int healPercent = (float)m_maxHealth * 0.25f;
+	printf("The crowd's cheers encouraged you. \n you heal for %i!\n", healPercent);
+	SetDamage(healPercent);
 }

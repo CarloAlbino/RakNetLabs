@@ -13,6 +13,6 @@ public:
 	void UseSpecial(RakNet::NetworkID playerIDs[], int size) override;
 
 private:
-
+	int m_spTurnsRemaining;
 
 };

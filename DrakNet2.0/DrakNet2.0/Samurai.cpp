@@ -1,5 +1,4 @@
 #include "Samurai.h"
-#include <stdio.h>
 
 Samurai::Samurai(char* name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
 {
@@ -33,7 +32,7 @@ void Samurai::UseAttack()
 
 void Samurai::UseHeal()
 {
-	int healPercent = (float)m_maxHealth * 1.7f;
+	int healPercent = (float)m_maxHealth * 0.17f;
 	printf("You sat and rested.  You healed yourself for %i health.\n", healPercent);
 	SetDamage(healPercent);
 }

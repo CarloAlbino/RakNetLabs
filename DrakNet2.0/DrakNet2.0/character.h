@@ -1,5 +1,6 @@
 #pragma once
 #include "NetworkIDManager.h"
+#include <stdio.h>
 
 enum CharacterClasses
 {

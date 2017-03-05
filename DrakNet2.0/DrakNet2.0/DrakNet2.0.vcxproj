@@ -135,6 +135,7 @@
     <ClCompile Include="character.cpp" />
     <ClCompile Include="Grifter.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Manager.cpp" />
     <ClCompile Include="NetRacer.cpp" />
     <ClCompile Include="Samurai.cpp" />
     <ClCompile Include="Wrestler.cpp" />
@@ -142,6 +143,7 @@
   <ItemGroup>
     <ClInclude Include="character.h" />
     <ClInclude Include="Grifter.h" />
+    <ClInclude Include="Manager.h" />
     <ClInclude Include="NetRacer.h" />
     <ClInclude Include="Samurai.h" />
     <ClInclude Include="Wrestler.h" />

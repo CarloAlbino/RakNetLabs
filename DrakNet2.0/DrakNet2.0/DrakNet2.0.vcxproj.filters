@@ -27,6 +27,12 @@
     <ClCompile Include="Samurai.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Wrestler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Grifter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="NetRacer.h">
@@ -36,6 +42,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Samurai.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Wrestler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Grifter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

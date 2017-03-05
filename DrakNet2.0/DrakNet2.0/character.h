@@ -13,14 +13,15 @@ class Character : public RakNet::NetworkIDObject
 {
 public:
 	void SetTarget(RakNet::NetworkID ID);
-	int GetTarget();
+	RakNet::NetworkID GetTarget();
+	RakNet::NetworkID GetPreviousTarget();
 	char* GetName();
 	CharacterClasses GetClass();
 
+	virtual void Update() = 0;	// Update updates the character at the begining of their turn
 	virtual void UseAttack() = 0;
 	virtual void UseHeal() = 0;
-	virtual void UseDodge() = 0;
-	virtual void UseSpecial() = 0;
+	virtual void UseSpecial(RakNet::NetworkID playerIDs[], int size) = 0;
 
 	bool CanAttack();
 
@@ -46,6 +47,7 @@ protected:
 	char* m_name;
 	CharacterClasses m_class;
 	RakNet::NetworkID m_currentTarget;
+	RakNet::NetworkID m_previousTarget;
 
 	int m_maxHealth;
 	int m_health;

@@ -9,10 +9,6 @@ public:
 
 	void UseAttack() override;
 	void UseHeal() override;
-	void UseDodge() override;
-	void UseSpecial() override;
-
-private:
-
+	void UseSpecial(RakNet::NetworkID playerIDs[], int size) override;
 
 };

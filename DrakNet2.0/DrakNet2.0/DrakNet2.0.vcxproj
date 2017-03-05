@@ -133,14 +133,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="character.cpp" />
+    <ClCompile Include="Grifter.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="NetRacer.cpp" />
     <ClCompile Include="Samurai.cpp" />
+    <ClCompile Include="Wrestler.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="character.h" />
+    <ClInclude Include="Grifter.h" />
     <ClInclude Include="NetRacer.h" />
     <ClInclude Include="Samurai.h" />
+    <ClInclude Include="Wrestler.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

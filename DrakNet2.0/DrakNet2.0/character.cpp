@@ -3,12 +3,18 @@
 
  void Character::SetTarget(RakNet::NetworkID ID) 
  {
+	 m_previousTarget = m_currentTarget;
 	 m_currentTarget = ID;
  }
 
- int Character::GetTarget()
+ RakNet::NetworkID Character::GetTarget()
  {
 	 return m_currentTarget;
+ }
+
+ RakNet::NetworkID Character::GetPreviousTarget()
+ {
+	 return m_previousTarget;
  }
 
  char * Character::GetName()

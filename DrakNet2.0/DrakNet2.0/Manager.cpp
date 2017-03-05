@@ -30,7 +30,7 @@ void Manager::Update()
 		m_spTurnsRemaining--;
 		if (m_spTurnsRemaining == 0)
 		{
-			m_speed = m_defaultSpeed;
+			m_defence = m_defaultDefence;
 		}
 	}
 }
@@ -53,5 +53,6 @@ void Manager::UseSpecial(RakNet::NetworkID playerIDs[], int size)
 {
 	printf("You throw your employees at the customers.  You triple your defences!\n");
 	m_spTurnsRemaining = 3;
+	m_defence *= 3;
 	// Attack target for a little damage
 }

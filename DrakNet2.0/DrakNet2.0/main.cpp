@@ -7,20 +7,26 @@
 #include "Gets.h"
 #include <thread>
 #include <vector>
-#include "NetRacer.h"
+#include "Wrestler.h"
+#include "Samurai.h"
+#include "Grifter.h"
+#include "Manager.h"
 #include <mutex>
 
 using namespace RakNet;
 
 enum {
-	ID_GB3_CREATE_RACER = ID_USER_PACKET_ENUM,
-	ID_GB3_ACCELERATE,
-	ID_GB3_BRAKE,
+	ID_CHATFIGHT_CREATE_CHARACTER = ID_USER_PACKET_ENUM,
+	ID_CHATFIGHT_ATTACK,
+	ID_CHATFIGHT_HEAL,
+	ID_CHATFIGHT_SPECIAL,
 };
 
 enum ReadyEventIDs
 {
 	ID_RE_PLAYER_JOIN = 0,
+	ID_RE_PLAYER_SELECT,
+	ID_RE_INGAME, 
 	ID_RE_GAME_OVER,
 };
 
@@ -28,15 +34,16 @@ void RacerUpdate();
 void PacketListener();
 void InputListener();
 void DisplayHelp();
+void DisplayClassInformation();
 
 RakPeerInterface* g_rakPeerInterface = nullptr;
 int g_startingPort = 6500;
 bool g_isRunning = true;
 bool g_isGameRunning = false;
 
-std::mutex g_racerMutex;
+std::mutex g_playerMutex;
 
-std::vector<CNetRacer*> g_racers;
+std::vector<Character*> g_characters;
 
 // Allows for ready events
 ReadyEvent g_readyEventPlugin;
@@ -60,7 +67,7 @@ int main()
 	g_cg2.SetAutoProcessNewConnections(true);
 
 	// Start up raknet
-	const unsigned int maxConnections = 6;
+	const unsigned int maxConnections = 4;
 	while (IRNS2_Berkley::IsPortInUse(g_startingPort, "127.0.0.1", AF_INET, SOCK_DGRAM) == true)
 	{
 		g_startingPort++;
@@ -107,25 +114,159 @@ int main()
 	// Ask for confirmation to start the game
 	g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, g_rakPeerInterface->GetMyGUID());
 
-	printf("I have one question...\n");
-	printf("ARE YOU READY TO RACE!!!??!?!?!?!?!??!\n");
-	printf("Type in y followed by enter if you are ready\n\n");
+	printf("ARE YOU READY TO CHAT FIGHT!?\n");
+	printf("Type in y followed by enter if you are ready...\n\n");
 	Gets(userInput, sizeof(userInput));
 	if (userInput[0] == 'y' || userInput[0] == 'Y')
 	{
-		CNetRacer*  racer = new CNetRacer();
-		racer->SetIsMaster(true);
-		racer->SetNetworkIDManager(&g_networkIDManager);
-		// inserting our racer at the beginning of the vector in order to have easy access later on
-		// g_racers[0] is our racer
-		g_racerMutex.lock();
-		g_racers.insert(g_racers.begin(), racer);
-		g_racerMutex.unlock();
+		static char* wrestler = "wrestler";
+		static char* samurai = "samurai";
+		static char* grifer = "grifer";
+		static char* manager = "manager";
+		static char* help = "help";
+
+		Character*  character;
+		char* characterName = "Buddy";
+		CharacterClasses chosenClass;
+		int statBoostPoints = 10;
+		int hpBoost;
+		int atkBoost;
+		int defBoost;
+		int spdBoost;
+
+		bool answered = false;
+		do {
+			printf("Choose your class:\n");
+			printf("Type 'wrestler' for wrestler\n");
+			printf("Type 'samurai' for samurai\n");
+			printf("Type 'grifer' for grifter\n");
+			printf("Type 'manager' for manager\n");
+			printf("Type 'help' for character class descriptions\n");
+
+			Gets(userInput, sizeof(userInput));
+
+			system("cls");
+
+			if (strcmp(userInput, wrestler) == 0)
+			{
+				printf("You chose the wrestler.\n");
+				chosenClass = E_CCWrestler;
+				answered = true;
+			}
+			else if (strcmp(userInput, samurai) == 0)
+			{
+				printf("You chose the samurai.\n");
+				chosenClass = E_CCSamurai;
+				answered = true;
+			}
+			else if (strcmp(userInput, grifer) == 0)
+			{
+				printf("You chose the grifer.\n");
+				chosenClass = E_CCGrifter;
+				answered = true;
+			}
+			else if (strcmp(userInput, manager) == 0)
+			{
+				printf("You chose the manager.\n");
+				chosenClass = E_CCManager;
+				answered = true;
+			}
+			else if (strcmp(userInput, help) == 0)
+			{
+				DisplayClassInformation();
+			}
+			else
+			{
+				printf("Unrecognized command please try again...\n\n");
+			}
+
+			if (answered)
+			{
+				int answer;
+				printf("You have 10 bonus stat points. You can assign them however you want.\n");
+
+				// Assign to HP
+				printf("How many points do you want to add to your HP stat?\n");
+
+				Gets(userInput, sizeof(userInput));
+				answer = atoi(userInput);
+				if (answer > statBoostPoints)
+					answer = statBoostPoints;
+
+				hpBoost = answer;
+				statBoostPoints -= answer;
+
+				// Assign to Attack
+				printf("How many points do you want to add to your attack stat?\n");
+
+				Gets(userInput, sizeof(userInput));
+				answer = atoi(userInput);
+				if (answer > statBoostPoints)
+					answer = statBoostPoints;
+
+				atkBoost = answer;
+				statBoostPoints -= answer;
+
+				// Assign to defence
+				printf("How many points do you want to add to your defence stat?\n");
+
+				Gets(userInput, sizeof(userInput));
+				answer = atoi(userInput);
+				if (answer > statBoostPoints)
+					answer = statBoostPoints;
+
+				defBoost = answer;
+				statBoostPoints -= answer;
+
+				// Assign to speed
+				printf("How many points do you want to add to your speed stat?\n");
+
+				Gets(userInput, sizeof(userInput));
+				answer = atoi(userInput);
+				if (answer > statBoostPoints)
+					answer = statBoostPoints;
+
+				spdBoost = answer;
+				statBoostPoints -= answer;
+			}
+
+		} while (!answered);
+
+		printf("Choose your character's name:\n");
+		Gets(userInput, sizeof(userInput));
+		characterName = userInput;
+
+		switch (chosenClass)
+		{
+		case E_CCWrestler:
+			character = new Wrestler(characterName, hpBoost, atkBoost, defBoost, spdBoost);
+			break;
+		case E_CCSamurai:
+			character = new Samurai(characterName, hpBoost, atkBoost, defBoost, spdBoost);
+			break;
+		case E_CCGrifter:
+			character = new Grifter(characterName, hpBoost, atkBoost, defBoost, spdBoost);
+			break;
+		case E_CCManager:
+			character = new Manager(characterName, hpBoost, atkBoost, defBoost, spdBoost);
+			break;
+		default:
+			character = new Wrestler(characterName, hpBoost, atkBoost, defBoost, spdBoost);
+			break;
+		}
+
+		character->SetIsMaster(true);
+		character->SetNetworkIDManager(&g_networkIDManager);
+		// inserting our character at the beginning of the vector in order to have easy access later on
+		// g_characters[0] is our racer
+		g_playerMutex.lock();
+		g_characters.insert(g_characters.begin(), character);
+		g_playerMutex.unlock();
 
 		// Set ready event to start the game
 		g_readyEventPlugin.SetEvent(ID_RE_PLAYER_JOIN, true);
-		std::thread inputListenerThread(InputListener);
-		std::thread racerUpdateThread(RacerUpdate);
+		std::thread inputListenerThread(InputListener);	/////////////////////////////////////////////////////////CHANGE THIS
+		std::thread racerUpdateThread(RacerUpdate);	/////////////////////////////////////////////////////////////CHANGE THIS
 		// this will make the program wait until the thread below is done executing
 		packetListenerThread.join();
 	}
@@ -145,12 +286,12 @@ void RacerUpdate()
 	{
 		while (g_isGameRunning)
 		{
-			g_racerMutex.lock();
-			for each(CNetRacer* racer in g_racers)
+			g_playerMutex.lock();
+			for each(CNetRacer* racer in g_characters)
 			{
 				racer->Update();
 			}
-			g_racerMutex.unlock();
+			g_playerMutex.unlock();
 		}
 		Sleep(100);
 	}
@@ -177,33 +318,33 @@ void InputListener()
 			if (strcmp(input, accelerate) == 0)
 			{
 				printf("Accelerating..\n");
-				g_racers[0]->Accelerate();
+				g_characters[0]->Accelerate();
 
 				// Send packet telling the world we are accelerating
 				BitStream bs;
 				bs.Write((unsigned char)ID_GB3_ACCELERATE);
-				bs.Write(g_racers[0]->GetNetworkID());
+				bs.Write(g_characters[0]->GetNetworkID());
 				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 			}
 			else if (strcmp(input, brake) == 0)
 			{
 				printf("Braking..\n");
-				g_racers[0]->Brake();
+				g_characters[0]->Brake();
 
 				// Send packet telling the world we are braking
 				BitStream bs;
 				bs.Write((unsigned char)ID_GB3_BRAKE);
-				bs.Write(g_racers[0]->GetNetworkID());
+				bs.Write(g_characters[0]->GetNetworkID());
 				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 			}
 			else if (strcmp(input, stats) == 0)
 			{
-				g_racerMutex.lock();
-				for each(CNetRacer* racer in g_racers)
+				g_playerMutex.lock();
+				for each(CNetRacer* racer in g_characters)
 				{
 					racer->DisplayStats();
 				}
-				g_racerMutex.unlock();
+				g_playerMutex.unlock();
 			}
 			else if (strcmp(input, help) == 0)
 			{
@@ -281,7 +422,7 @@ void PacketListener()
 
 						BitStream bs;
 						bs.Write((unsigned char)ID_GB3_CREATE_RACER);
-						bs.Write(g_racers[0]->GetNetworkID());
+						bs.Write(g_characters[0]->GetNetworkID());
 						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 					}
 				}
@@ -301,9 +442,9 @@ void PacketListener()
 				racer->SetIsMaster(false);
 				racer->SetNetworkIDManager(&g_networkIDManager);
 				racer->SetNetworkID(netID);
-				g_racerMutex.lock();
-				g_racers.push_back(racer);
-				g_racerMutex.unlock();
+				g_playerMutex.lock();
+				g_characters.push_back(racer);
+				g_playerMutex.unlock();
 			}
 			break;
 			case ID_GB3_ACCELERATE:
@@ -342,6 +483,68 @@ void PacketListener()
 		}
 		Sleep(100);
 	}
+}
+
+void DisplayClassInformation()
+{
+	// Wrestler Description
+	printf("-----------------------------------------------\n");
+	printf("## Wrestler ##\n");
+	printf("A good all around fighter.  They love to play to the crowd.\n");
+	printf("-----------------------------------------------\n");
+	printf("BASE HP: 25\n");
+	printf("BASE ATTACK: 15\n");
+	printf("BASE DEFENCE: 15\n");
+	printf("BASE SPEED: 8\n");
+	printf("-----------------------------------------------\n");
+	printf("SPECIAL ATTACK:\n");
+	printf("Attack x2, Speed x1.5 for 3 turns.\n");
+	printf("Heal 25% on the turn you use your special.\n");
+	printf("-----------------------------------------------\n");
+
+	// Samurai Description
+	printf("-----------------------------------------------\n");
+	printf("## Samurai ##\n");
+	printf("A powerful attacker.  Always stoic in the face of danger.\n");
+	printf("-----------------------------------------------\n");
+	printf("BASE HP: 30\n");
+	printf("BASE ATTACK: 20\n");
+	printf("BASE DEFENCE: 15\n");
+	printf("BASE SPEED: 3\n");
+	printf("-----------------------------------------------\n");
+	printf("SPECIAL ATTACK:\n");
+	printf("Damage all opponents at once.\n");
+	printf("-----------------------------------------------\n");
+
+	// Grifter Description
+	printf("-----------------------------------------------\n");
+	printf("## Grifter ##\n");
+	printf("A sneaky and quick fighter.  They'll talk you into buying the air around you.\n");
+	printf("-----------------------------------------------\n");
+	printf("BASE HP: 20\n");
+	printf("BASE ATTACK: 10\n");
+	printf("BASE DEFENCE: 5\n");
+	printf("BASE SPEED: 12\n");
+	printf("-----------------------------------------------\n");
+	printf("SPECIAL ATTACK:\n");
+	printf("Speed x3 for 3 turns.\n");
+	printf("Attack a target for 5 damage.\n");
+	printf("-----------------------------------------------\n");
+
+	// Manager Description
+	printf("-----------------------------------------------\n");
+	printf("## Manager ##\n");
+	printf("A defensive juggernaut.  They'll make sure their employees do all the work.\n");
+	printf("-----------------------------------------------\n");
+	printf("BASE HP: 10\n");
+	printf("BASE ATTACK: 20\n");
+	printf("BASE DEFENCE: 35\n");
+	printf("BASE SPEED: 1\n");
+	printf("-----------------------------------------------\n");
+	printf("SPECIAL ATTACK:\n");
+	printf("Defence x3 for 3 turns.\n");
+	printf("Attack a target for 1 damage.\n");
+	printf("-----------------------------------------------\n");
 }
 
 

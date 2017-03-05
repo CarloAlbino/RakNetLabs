@@ -9,7 +9,7 @@ Samurai::Samurai(char* name, int healthBoost, int atkBoost, int defBoost, int sp
 	m_previousTarget = -1;
 
 	m_maxHealth = 30 + healthBoost;
-	m_defaultAttack = 15 + atkBoost;
+	m_defaultAttack = 20 + atkBoost;
 	m_defaultDefence = 15 + defBoost;
 	m_defaultSpeed = 3 + spdBoost;
 
@@ -20,6 +20,10 @@ Samurai::Samurai(char* name, int healthBoost, int atkBoost, int defBoost, int sp
 }
 
 Samurai::~Samurai()
+{
+}
+
+void Samurai::Update()
 {
 }
 

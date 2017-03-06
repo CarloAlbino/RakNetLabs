@@ -30,7 +30,7 @@
 	 }
  }
 
- bool Character::IsTurn(int attackTurn)//, RakNet::NetworkID id)
+ RakNet::NetworkID Character::IsTurn(int attackTurn)//, RakNet::NetworkID id)
  {
 	 /*bool result = false;
 
@@ -41,14 +41,16 @@
 
 	 return result;*/
 
-	 if (attackTurn == m_turnNum)
+	 /*if (attackTurn == m_turnNum)
 	 {
 		 return true;
 	 }
 	 else
 	 {
 		 return false;
-	 }
+	 }*/
+
+	 return m_playerAtkOrder.at(attackTurn);
  }
 
  RakNet::NetworkID Character::GetTarget()

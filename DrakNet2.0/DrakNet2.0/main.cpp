@@ -21,7 +21,11 @@ enum {
 	ID_CHATFIGHT_HEAL,
 	ID_CHATFIGHT_SPECIAL,
 	ID_CHATFIGHT_TURN_OVER,
+	ID_CHATFIGHT_QUERY_TURN,
+	ID_CHATFIGHT_TURN,
 };
+
+// host has order other players query the host to 
 
 enum ReadyEventIDs
 {
@@ -42,13 +46,14 @@ RakPeerInterface* g_rakPeerInterface = nullptr;
 int g_startingPort = 6500;
 bool g_isRunning = true;
 bool g_isGameRunning = false;
+bool g_isHost = false;
+bool g_isLocalTurn = false;
 
 std::mutex g_playerMutex;
 
 std::vector<Character*> g_characters;
 std::vector<RakNet::NetworkID> g_playerIDs;
 int g_turnCount = 0;
-bool g_isLocalTurn = false;
 int g_maxPlayers = 4;
 
 // Allows for ready events
@@ -115,6 +120,10 @@ int main()
 		}
 
 		printf("CONNECTED!!\n");
+	}
+	else
+	{
+		g_isHost = true;
 	}
 
 	// Ask for confirmation to start the game
@@ -272,7 +281,7 @@ int main()
 		// Set ready event to start the game
 		g_readyEventPlugin.SetEvent(ID_RE_PLAYER_JOIN, true);
 		std::thread inputListenerThread(InputListener);	/////////////////////////////////////////////////////////CHANGE THIS
-
+		//inputListenerThread.~thread();
 		// this will make the program wait until the thread below is done executing
 		packetListenerThread.join();
 	}
@@ -284,6 +293,14 @@ int main()
 
 	return 0;
 }
+
+//void StateListener()
+//{
+//	while(g_isRunning)
+//	{
+//		if()
+//	}
+//}
 
 void InputListener()
 {
@@ -298,14 +315,11 @@ void InputListener()
 	{
 		while (g_isGameRunning)
 		{
+			g_playerMutex.lock();
 			char input[32];
 			//system("cls");
 
-			g_playerMutex.lock();
-			bool isTurn = g_characters[0]->IsTurn(g_turnCount);// , g_characters[0]->GetNetworkID());
-			g_playerMutex.unlock();
-
-			if (isTurn)
+			if (g_isLocalTurn)
 			{
 				printf("It's your turn, enter something to continue.\n");
 				//Gets(input, sizeof(input));
@@ -329,18 +343,11 @@ void InputListener()
 
 			if (strcmp(input, attack) == 0)
 			{
-				if (isTurn)
+				if (g_isLocalTurn)
 				{
 					// Attack stuff 
-
-					BitStream bs;
-					bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
-					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
-					g_turnCount++;
-					if (g_turnCount > g_characters.size())
-					{
-						g_turnCount = 0;
-					}
+					printf("Attacking");
+					g_readyEventPlugin.SetEvent(ID_RE_TURN_OVER, true);
 				}
 				else
 				{
@@ -349,12 +356,12 @@ void InputListener()
 			}
 			else if (strcmp(input, stats) == 0)
 			{
-				g_playerMutex.lock();
+				//g_playerMutex.lock();
 				for each(Character* character in g_characters)
 				{
 					character->DisplayStats();
 				}
-				g_playerMutex.unlock();
+				//g_playerMutex.unlock();
 			}
 			else if (strcmp(input, help) == 0)
 			{
@@ -367,8 +374,9 @@ void InputListener()
 				g_isGameRunning = false;
 				g_isRunning = false;
 			}
+			g_playerMutex.unlock();
 		}
-		Sleep(100);
+		Sleep(200);
 	}
 }
 
@@ -468,7 +476,36 @@ void PacketListener()
 
 						SetPlayerOrder();
 
-						g_isGameRunning = true;
+						// Check if it is host's turn
+						if (g_isHost)
+						{
+							if (g_characters[0]->GetNetworkID() == g_characters[0]->IsTurn(g_turnCount))
+							{
+								// It is host's turn
+								g_isLocalTurn = true;
+								g_isGameRunning = true;
+							}
+							else
+							{
+								g_isLocalTurn = false;
+								g_readyEventPlugin.SetEvent(ID_RE_TURN_OVER, true);
+							}
+						}
+
+						BitStream bs;
+						bs.Write((unsigned char)ID_CHATFIGHT_QUERY_TURN);
+						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+					}
+
+					if (readyEventId == ID_RE_TURN_OVER)
+					{
+						g_isGameRunning = false;
+						printf("Turn over");
+						// Turn is over
+						BitStream bs;
+						bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
+						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+						g_readyEventPlugin.SetEvent(ID_RE_TURN_OVER, false);
 					}
 
 				}
@@ -529,19 +566,86 @@ void PacketListener()
 				}
 			}
 			break;
+			case ID_CHATFIGHT_QUERY_TURN:
+				{
+					// Is it the asker's turn?
+					if (g_isHost)
+					{
+						BitStream bs;
+						bs.Write((unsigned char)ID_CHATFIGHT_TURN);
+						// Send whose turn it is
+						bs.Write(g_characters[0]->IsTurn(g_turnCount));
+						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+					}
+				}
+				break;
+
+			case ID_CHATFIGHT_TURN:
+				{
+					// If it is the host's turn they already know it's their turn
+					if (!g_isHost)
+					{
+						BitStream bs(packet->data, packet->length, false);
+						bs.IgnoreBytes(sizeof(MessageID));
+						NetworkID netID;
+						bs.Read(netID);
+
+						if (netID == g_characters[0]->GetNetworkID())
+						{
+							g_isLocalTurn = true;
+							g_isGameRunning = true;
+						}
+						else
+						{
+							g_isLocalTurn = false;
+							// Not your turn, turn is over
+							g_readyEventPlugin.SetEvent(ID_RE_TURN_OVER, true);
+							g_isGameRunning = true;
+						}
+					}
+				}
+				break;
 			case ID_CHATFIGHT_TURN_OVER:
 			{
-				g_playerMutex.lock();
-				g_turnCount++;
-				if (g_turnCount > g_characters.size())
+				if (g_isHost)
 				{
-					g_turnCount = 0;
+					printf("Setting whose turn it is");
+					// Set the next player's turn
+					BitStream bs(packet->data, packet->length, false);
+					bs.IgnoreBytes(sizeof(MessageID));
+					NetworkID netID;
+					bs.Read(netID);
+
+					g_playerMutex.lock();
+					if(netID == g_characters[0]->IsTurn(g_turnCount))
+					{ 
+						g_turnCount++;
+						if (g_turnCount > g_playerIDs.size())
+						{
+							g_turnCount = 0;
+						}
+
+						if (g_characters[0]->GetNetworkID() == g_characters[0]->IsTurn(g_turnCount))
+						{
+							// It is host's turn
+							g_isLocalTurn = true;
+							g_isGameRunning = true;
+						}
+						else
+						{
+							g_isLocalTurn = false;
+						}
+					}
+					g_playerMutex.unlock();
 				}
-				if (g_characters[0]->IsTurn(g_turnCount))// , g_characters[0]->GetNetworkID()))
+				else
 				{
-					printf("It's your turn, press enter.\n");
+					printf("Asking whose turn it is");
+					// Ask whose turn it is
+					BitStream bs;
+					bs.Write((unsigned char)ID_CHATFIGHT_QUERY_TURN);
+					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 				}
-				g_playerMutex.unlock();
 			}
 			break;
 			default:

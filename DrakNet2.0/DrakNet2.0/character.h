@@ -1,6 +1,7 @@
 #pragma once
 #include "NetworkIDManager.h"
 #include <stdio.h>
+#include <vector>
 
 enum CharacterClasses
 {
@@ -14,8 +15,10 @@ class Character : public RakNet::NetworkIDObject
 {
 public:
 	void SetTarget(RakNet::NetworkID ID);
+	void SetPlayerAtkOrder(RakNet::NetworkID id, bool isSelf, int num);
+	void PrintAtkOrder(std::vector<Character*> characters);
+	bool IsTurn(int attackTurn);// , RakNet::NetworkID id);
 	RakNet::NetworkID GetTarget();
-	RakNet::NetworkID GetPreviousTarget();
 	char* GetName();
 	CharacterClasses GetClass();
 
@@ -35,6 +38,11 @@ public:
 	int GetAttack();
 	void SetAttack(int attack);
 
+	int GetHPBoost();
+	int GetAtkBoost();
+	int GetDefBoost();
+	int GetSpdBoost();
+
 	void ResetStats();
 	void DisplayStats();
 
@@ -47,8 +55,9 @@ protected:
 protected:
 	char* m_name;
 	CharacterClasses m_class;
+	std::vector<RakNet::NetworkID> m_playerAtkOrder;
+	int m_turnNum;
 	RakNet::NetworkID m_currentTarget;
-	RakNet::NetworkID m_previousTarget;
 
 	int m_maxHealth;
 	int m_health;
@@ -58,6 +67,12 @@ protected:
 	int m_speed;
 	int m_defaultAttack;
 	int m_attack;
+
+	// For making raplicas
+	int m_healthBoost;
+	int m_atkBoost;
+	int m_defBoost;
+	int m_spdBoost;
 
 	bool m_isMaster;
 };

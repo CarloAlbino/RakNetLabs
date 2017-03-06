@@ -3,8 +3,52 @@
 
  void Character::SetTarget(RakNet::NetworkID ID) 
  {
-	 m_previousTarget = m_currentTarget;
 	 m_currentTarget = ID;
+ }
+
+ void Character::SetPlayerAtkOrder(RakNet::NetworkID id, bool isSelf, int num)
+ {
+	 m_playerAtkOrder.push_back(id);
+	 if (isSelf)
+	 {
+		 m_turnNum = num;
+	 }
+ }
+
+ void Character::PrintAtkOrder(std::vector<Character*> characters)
+ {
+	 for each(RakNet::NetworkID id in m_playerAtkOrder)
+	 {
+		 for each(Character* c in characters)
+		 {
+			 if (id == c->GetNetworkID())
+			 {
+				 printf(c->GetName());
+				 printf(" --\n");
+			 }
+		 }
+	 }
+ }
+
+ bool Character::IsTurn(int attackTurn)//, RakNet::NetworkID id)
+ {
+	 /*bool result = false;
+
+	 if (m_playerAtkOrder.at(attackTurn) == id)
+	 {
+		 result = true;
+	 }
+
+	 return result;*/
+
+	 if (attackTurn == m_turnNum)
+	 {
+		 return true;
+	 }
+	 else
+	 {
+		 return false;
+	 }
  }
 
  RakNet::NetworkID Character::GetTarget()
@@ -12,12 +56,7 @@
 	 return m_currentTarget;
  }
 
- RakNet::NetworkID Character::GetPreviousTarget()
- {
-	 return m_previousTarget;
- }
-
- char * Character::GetName()
+ char* Character::GetName()
  {
 	 return m_name;
  }
@@ -85,6 +124,26 @@ void Character::SetAttack(int attack)
 		m_attack = 0;
 }
 
+int Character::GetHPBoost()
+{
+	return m_healthBoost;
+}
+
+int Character::GetAtkBoost()
+{
+	return m_atkBoost;
+}
+
+int Character::GetDefBoost()
+{
+	return m_defBoost;
+}
+
+int Character::GetSpdBoost()
+{
+	return m_spdBoost;
+}
+
 void Character::ResetStats()
 {
 	m_health = m_maxHealth;
@@ -109,7 +168,7 @@ void Character::DisplayStats()
 	printf("HP: %i / %i\n", m_health, m_maxHealth);
 	printf("ATTACK: %i\n", m_attack);
 	printf("DEFENCE: %i\n", m_defence);
-	printf("SPEED: %if\n", m_speed);
+	printf("SPEED: %i\n", m_speed);
 	printf("************************************************\n");
 	printf("************************************************\n");
 }

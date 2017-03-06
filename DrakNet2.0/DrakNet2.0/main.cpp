@@ -20,21 +20,23 @@ enum {
 	ID_CHATFIGHT_ATTACK,
 	ID_CHATFIGHT_HEAL,
 	ID_CHATFIGHT_SPECIAL,
+	ID_CHATFIGHT_TURN_OVER,
 };
 
 enum ReadyEventIDs
 {
 	ID_RE_PLAYER_JOIN = 0,
-	ID_RE_PLAYER_SELECT,
-	ID_RE_INGAME, 
+	ID_RE_CHARACTERS_SELECTED,
+	ID_RE_TURN_OVER,
 	ID_RE_GAME_OVER,
 };
 
-void RacerUpdate();
 void PacketListener();
 void InputListener();
 void DisplayHelp();
 void DisplayClassInformation();
+void SetPlayerOrder();
+RakNet::NetworkID GetFastestPlayer();
 
 RakPeerInterface* g_rakPeerInterface = nullptr;
 int g_startingPort = 6500;
@@ -44,6 +46,10 @@ bool g_isGameRunning = false;
 std::mutex g_playerMutex;
 
 std::vector<Character*> g_characters;
+std::vector<RakNet::NetworkID> g_playerIDs;
+int g_turnCount = 0;
+bool g_isLocalTurn = false;
+int g_maxPlayers = 4;
 
 // Allows for ready events
 ReadyEvent g_readyEventPlugin;
@@ -67,7 +73,7 @@ int main()
 	g_cg2.SetAutoProcessNewConnections(true);
 
 	// Start up raknet
-	const unsigned int maxConnections = 4;
+	const unsigned int maxConnections = g_maxPlayers;
 	while (IRNS2_Berkley::IsPortInUse(g_startingPort, "127.0.0.1", AF_INET, SOCK_DGRAM) == true)
 	{
 		g_startingPort++;
@@ -121,7 +127,7 @@ int main()
 	{
 		static char* wrestler = "wrestler";
 		static char* samurai = "samurai";
-		static char* grifer = "grifer";
+		static char* grifter = "grifter";
 		static char* manager = "manager";
 		static char* help = "help";
 
@@ -139,7 +145,7 @@ int main()
 			printf("Choose your class:\n");
 			printf("Type 'wrestler' for wrestler\n");
 			printf("Type 'samurai' for samurai\n");
-			printf("Type 'grifer' for grifter\n");
+			printf("Type 'grifter' for grifter\n");
 			printf("Type 'manager' for manager\n");
 			printf("Type 'help' for character class descriptions\n");
 
@@ -159,7 +165,7 @@ int main()
 				chosenClass = E_CCSamurai;
 				answered = true;
 			}
-			else if (strcmp(userInput, grifer) == 0)
+			else if (strcmp(userInput, grifter) == 0)
 			{
 				printf("You chose the grifer.\n");
 				chosenClass = E_CCGrifter;
@@ -266,7 +272,7 @@ int main()
 		// Set ready event to start the game
 		g_readyEventPlugin.SetEvent(ID_RE_PLAYER_JOIN, true);
 		std::thread inputListenerThread(InputListener);	/////////////////////////////////////////////////////////CHANGE THIS
-		std::thread racerUpdateThread(RacerUpdate);	/////////////////////////////////////////////////////////////CHANGE THIS
+
 		// this will make the program wait until the thread below is done executing
 		packetListenerThread.join();
 	}
@@ -279,28 +285,9 @@ int main()
 	return 0;
 }
 
-void RacerUpdate()
-{
-	printf("Welcome to Net Racer!\n");
-	while (g_isRunning)
-	{
-		while (g_isGameRunning)
-		{
-			g_playerMutex.lock();
-			for each(CNetRacer* racer in g_characters)
-			{
-				racer->Update();
-			}
-			g_playerMutex.unlock();
-		}
-		Sleep(100);
-	}
-}
-
 void InputListener()
 {
-	static char* accelerate = "go";
-	static char* brake = "stop";
+	static char* attack = "attack";
 	static char* stats = "stats";
 	static char* help = "help";
 	static char* quit = "quit";
@@ -312,43 +299,67 @@ void InputListener()
 		while (g_isGameRunning)
 		{
 			char input[32];
-			Gets(input, sizeof(input));
-			system("cls");
+			//system("cls");
 
-			if (strcmp(input, accelerate) == 0)
+			g_playerMutex.lock();
+			bool isTurn = g_characters[0]->IsTurn(g_turnCount);// , g_characters[0]->GetNetworkID());
+			g_playerMutex.unlock();
+
+			if (isTurn)
 			{
-				printf("Accelerating..\n");
-				g_characters[0]->Accelerate();
+				printf("It's your turn, enter something to continue.\n");
+				//Gets(input, sizeof(input));
 
-				// Send packet telling the world we are accelerating
-				BitStream bs;
-				bs.Write((unsigned char)ID_GB3_ACCELERATE);
-				bs.Write(g_characters[0]->GetNetworkID());
+				/*BitStream bs;
+				bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
 				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+				g_turnCount++;
+				if (g_turnCount > g_characters.size())
+				{
+					g_turnCount = 0;
+				}*/
 			}
-			else if (strcmp(input, brake) == 0)
+			else
 			{
-				printf("Braking..\n");
-				g_characters[0]->Brake();
+				printf("Please wait for your turn...\n");
+				//Gets(input, sizeof(input));
+			}
 
-				// Send packet telling the world we are braking
-				BitStream bs;
-				bs.Write((unsigned char)ID_GB3_BRAKE);
-				bs.Write(g_characters[0]->GetNetworkID());
-				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+			Gets(input, sizeof(input));
+
+			if (strcmp(input, attack) == 0)
+			{
+				if (isTurn)
+				{
+					// Attack stuff 
+
+					BitStream bs;
+					bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
+					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+					g_turnCount++;
+					if (g_turnCount > g_characters.size())
+					{
+						g_turnCount = 0;
+					}
+				}
+				else
+				{
+					printf("It's not your turn you can't attack yet.\n");
+				}
 			}
 			else if (strcmp(input, stats) == 0)
 			{
 				g_playerMutex.lock();
-				for each(CNetRacer* racer in g_characters)
+				for each(Character* character in g_characters)
 				{
-					racer->DisplayStats();
+					character->DisplayStats();
 				}
 				g_playerMutex.unlock();
 			}
 			else if (strcmp(input, help) == 0)
 			{
-				DisplayHelp();
+				//DisplayHelp();
+				DisplayClassInformation();
 			}
 			else if (strcmp(input, quit) == 0)
 			{
@@ -392,6 +403,9 @@ void PacketListener()
 			case ID_CONNECTION_REQUEST_ACCEPTED:
 				printf("ID_CONNECTION_REQUEST_ACCEPTED\n");
 				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_CHARACTERS_SELECTED, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_TURN_OVER, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
 				break;
 			case ID_CONNECTION_ATTEMPT_FAILED:
 				printf("ID_CONNECTION_ATTEMPT_FAILED\n");
@@ -400,8 +414,11 @@ void PacketListener()
 				printf("ID_ALREADY_CONNECTED\n");
 				break;
 			case ID_NEW_INCOMING_CONNECTION:
-				printf("ID_NEW_INCOMING_CONNECTION\n");
+				printf("** New player connected. **\n");
 				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_CHARACTERS_SELECTED, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_TURN_OVER, packet->guid);
+				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
 				break;
 			case ID_NO_FREE_INCOMING_CONNECTIONS:
 				printf("ID_NO_FREE_INCOMING_CONNECTIONS\n");
@@ -416,64 +433,115 @@ void PacketListener()
 					bs.IgnoreBytes(sizeof(MessageID));
 					int readyEventId;
 					bs.Read(readyEventId);
+
+					// If player join is set send created characters to all connected players
 					if (readyEventId == ID_RE_PLAYER_JOIN && !g_isGameRunning)
 					{
-						g_isGameRunning = true;
+						g_readyEventPlugin.AddToWaitList(ID_RE_CHARACTERS_SELECTED, packet->guid);
+						//g_isGameRunning = true;
 
 						BitStream bs;
-						bs.Write((unsigned char)ID_GB3_CREATE_RACER);
+						bs.Write((unsigned char)ID_CHATFIGHT_CREATE_CHARACTER);
 						bs.Write(g_characters[0]->GetNetworkID());
+						bs.Write(g_characters[0]->GetClass());
+						char nameInput[32];
+						strcpy(nameInput, g_characters[0]->GetName());
+						bs.Write(nameInput);
+						bs.Write(g_characters[0]->GetHPBoost());
+						bs.Write(g_characters[0]->GetAtkBoost());
+						bs.Write(g_characters[0]->GetDefBoost());
+						bs.Write(g_characters[0]->GetSpdBoost());
 						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+
+						g_readyEventPlugin.SetEvent(ID_RE_CHARACTERS_SELECTED, true);
 					}
+
+					if (readyEventId == ID_RE_CHARACTERS_SELECTED)
+					{
+						printf("All players have selected their characters.\n");
+						g_playerMutex.lock();
+						for each(Character* character in g_characters)
+						{
+							character->DisplayStats();
+						}
+						g_playerMutex.unlock();
+
+						SetPlayerOrder();
+
+						g_isGameRunning = true;
+					}
+
 				}
 				break;
 			case ID_READY_EVENT_UNSET:
 				printf("ID_READY_EVENT_UNSET\n");
 				break;
-			case ID_GB3_CREATE_RACER:
+			case ID_CHATFIGHT_CREATE_CHARACTER:
 			{
 				printf("creating replica...\n");
 				BitStream bs(packet->data, packet->length, false);
 				bs.IgnoreBytes(sizeof(MessageID));
 				NetworkID netID;
 				bs.Read(netID);
+				CharacterClasses charClass;
+				bs.Read(charClass);
 
-				CNetRacer* racer = new CNetRacer();
-				racer->SetIsMaster(false);
-				racer->SetNetworkIDManager(&g_networkIDManager);
-				racer->SetNetworkID(netID);
-				g_playerMutex.lock();
-				g_characters.push_back(racer);
-				g_playerMutex.unlock();
+				Character* newCharacter = new Wrestler("name", 0, 0, 0, 0);
+				char nameInput[32];
+				int hpBoost;
+				int atkBoost;
+				int defBoost;
+				int spdBoost;
+
+				bs.Read(nameInput);
+				bs.Read(hpBoost);
+				bs.Read(atkBoost);
+				bs.Read(defBoost);
+				bs.Read(spdBoost);
+
+				switch (charClass)
+				{
+				case E_CCWrestler:
+					newCharacter = new Wrestler(nameInput, hpBoost, atkBoost, defBoost, spdBoost);
+					break;
+				case E_CCSamurai:
+					newCharacter = new Samurai(nameInput, hpBoost, atkBoost, defBoost, spdBoost);
+					break;
+				case E_CCGrifter:
+					newCharacter = new Grifter(nameInput, hpBoost, atkBoost, defBoost, spdBoost);
+					break;
+				case E_CCManager:
+					newCharacter = new Manager(nameInput, hpBoost, atkBoost, defBoost, spdBoost);
+					break;
+				default:
+					printf("UNKNOWN CLASS PASSED IN!");
+					break;
+				}
+
+				if (newCharacter != nullptr)
+				{
+					newCharacter->SetIsMaster(false);
+					newCharacter->SetNetworkIDManager(&g_networkIDManager);
+					newCharacter->SetNetworkID(netID);
+					g_playerMutex.lock();
+					g_characters.push_back(newCharacter);
+					g_playerMutex.unlock();
+				}
 			}
 			break;
-			case ID_GB3_ACCELERATE:
+			case ID_CHATFIGHT_TURN_OVER:
 			{
-				BitStream bs(packet->data, packet->length, false);
-				bs.IgnoreBytes(sizeof(MessageID));
-				NetworkID netID;
-				bs.Read(netID);
-
-				CNetRacer* racer = g_networkIDManager.GET_OBJECT_FROM_ID<CNetRacer*>(netID);
-				if (racer)
+				g_playerMutex.lock();
+				g_turnCount++;
+				if (g_turnCount > g_characters.size())
 				{
-					racer->Accelerate();
+					g_turnCount = 0;
 				}
-			}
-				break;
-
-			case ID_GB3_BRAKE:
-			{
-				BitStream bs(packet->data, packet->length, false);
-				bs.IgnoreBytes(sizeof(MessageID));
-				NetworkID netID;
-				bs.Read(netID);
-
-				CNetRacer* racer = g_networkIDManager.GET_OBJECT_FROM_ID<CNetRacer*>(netID);
-				if (racer)
+				if (g_characters[0]->IsTurn(g_turnCount))// , g_characters[0]->GetNetworkID()))
 				{
-					racer->Brake();
+					printf("It's your turn, press enter.\n");
 				}
+				g_playerMutex.unlock();
 			}
 			break;
 			default:
@@ -499,7 +567,7 @@ void DisplayClassInformation()
 	printf("-----------------------------------------------\n");
 	printf("SPECIAL ATTACK:\n");
 	printf("Attack x2, Speed x1.5 for 3 turns.\n");
-	printf("Heal 25% on the turn you use your special.\n");
+	printf("Heal 25%s on the turn you use your special.\n", "%");
 	printf("-----------------------------------------------\n");
 
 	// Samurai Description
@@ -547,4 +615,75 @@ void DisplayClassInformation()
 	printf("-----------------------------------------------\n");
 }
 
+void SetPlayerOrder()
+{
+	g_playerMutex.lock();
+	for (int i = 0; i < g_characters.size(); i++)
+	{
+		g_playerIDs.push_back(g_characters[i]->GetNetworkID());
+	}
+	g_playerMutex.unlock();
 
+	RakNet::NetworkID fastest = 0;
+	int i = 0;
+	do {
+		fastest = GetFastestPlayer();
+		if (fastest != 0)
+		{
+			for each (RakNet::NetworkID id in g_playerIDs)
+			{
+				if (fastest == id)
+				{
+					if (g_characters[0]->GetNetworkID() == id)
+					{
+						g_characters[0]->SetPlayerAtkOrder(fastest, true, i);
+					}
+					else
+					{
+						g_characters[0]->SetPlayerAtkOrder(fastest, false, 0);
+					}
+				}
+			}
+
+			for (int i = 0; i < g_playerIDs.size(); i++)
+			{
+				if (g_playerIDs[i] == fastest)
+				{
+					g_playerIDs.erase(g_playerIDs.begin() + i);
+				}
+			}
+		}
+		i++;
+	} while (fastest != 0);
+	// For testing
+	//g_characters[0]->PrintAtkOrder(g_characters);
+}
+
+RakNet::NetworkID GetFastestPlayer()
+{
+	if (g_playerIDs.size() == 0)
+	{
+		return 0;
+	}
+	else
+	{
+		RakNet::NetworkID fastestPlayer;
+		int fastestSpeed = -1;
+		for each (Character* character in g_characters)
+		{
+			for each (RakNet::NetworkID id in g_playerIDs)
+			{
+				if (character->GetNetworkID() == id)
+				{
+					if (character->GetSpeed() > fastestSpeed)
+					{
+						fastestPlayer = id;
+						fastestSpeed = character->GetSpeed();
+					}
+				}
+			}
+		}
+
+		return fastestPlayer;
+	}
+}

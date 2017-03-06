@@ -1,12 +1,11 @@
 #include "Wrestler.h"
 
-Wrestler::Wrestler(char * name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
+Wrestler::Wrestler(char* name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
 {
 	m_isMaster = false;
 	m_name = name;
 	m_class = E_CCWrestler;
-	m_currentTarget = -1;
-	m_previousTarget = -1;
+	m_currentTarget = 0;
 
 	m_maxHealth = 25 + healthBoost;
 	m_defaultAttack = 15 + atkBoost;
@@ -17,6 +16,11 @@ Wrestler::Wrestler(char * name, int healthBoost, int atkBoost, int defBoost, int
 	m_attack = m_defaultAttack;
 	m_defence = m_defaultDefence;
 	m_speed = m_defaultSpeed;
+
+	m_healthBoost = healthBoost;
+	m_atkBoost = atkBoost;
+	m_defBoost = defBoost;
+	m_spdBoost = spdBoost;
 }
 
 Wrestler::~Wrestler()

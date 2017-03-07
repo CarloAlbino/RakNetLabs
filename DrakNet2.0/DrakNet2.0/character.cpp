@@ -30,17 +30,8 @@
 	 }
  }
 
- bool Character::IsTurn(int attackTurn)//, RakNet::NetworkID id)
+ bool Character::IsTurn(int attackTurn)
  {
-	 /*bool result = false;
-
-	 if (m_playerAtkOrder.at(attackTurn) == id)
-	 {
-		 result = true;
-	 }
-
-	 return result;*/
-
 	 if (attackTurn == m_turnNum)
 	 {
 		 return true;

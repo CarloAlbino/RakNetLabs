@@ -17,7 +17,7 @@ public:
 	void SetTarget(RakNet::NetworkID ID);
 	void SetPlayerAtkOrder(RakNet::NetworkID id, bool isSelf, int num);
 	void PrintAtkOrder(std::vector<Character*> characters);
-	bool IsTurn(int attackTurn);// , RakNet::NetworkID id);
+	bool IsTurn(int attackTurn);
 	RakNet::NetworkID GetTarget();
 	char* GetName();
 	CharacterClasses GetClass();

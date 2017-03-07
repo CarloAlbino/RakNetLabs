@@ -47,7 +47,7 @@ std::mutex g_playerMutex;
 
 std::vector<Character*> g_characters;
 std::vector<RakNet::NetworkID> g_playerIDs;
-
+int g_turnCount = 0;
 int g_maxPlayers = 4;
 
 // Allows for ready events
@@ -297,39 +297,57 @@ void InputListener()
 	{
 		while (g_isGameRunning)
 		{
-			char input[32];
-			Gets(input, sizeof(input));
-			system("cls");
-
-			if (strcmp(input, attack) == 0)
+			if (g_characters[0]->IsTurn(g_turnCount))
 			{
-				printf("Attacking..\n");
+				system("cls");
+				printf("Your turn.\n");
+				char input[32];
+				Gets(input, sizeof(input));
+				system("cls");
 
-				// Send packet telling the world we are accelerating
-				//BitStream bs;
-				//bs.Write((unsigned char)ID_GB3_ACCELERATE);
-				//bs.Write(g_racers[0]->GetNetworkID());
-				//g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
-			}
-			else if (strcmp(input, stats) == 0)
-			{
-				g_playerMutex.lock();
-				for each(Character* character in g_characters)
+				if (strcmp(input, attack) == 0)
 				{
-					character->DisplayStats();
+					printf("Attacking..\n");
+
+					// Send packet telling the world we are accelerating
+					//BitStream bs;
+					//bs.Write((unsigned char)ID_GB3_ACCELERATE);
+					//bs.Write(g_racers[0]->GetNetworkID());
+					//g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 				}
-				g_playerMutex.unlock();
+				else if (strcmp(input, stats) == 0)
+				{
+					g_playerMutex.lock();
+					for each(Character* character in g_characters)
+					{
+						character->DisplayStats();
+					}
+					g_playerMutex.unlock();
+				}
+				else if (strcmp(input, help) == 0)
+				{
+					//DisplayHelp();
+					DisplayClassInformation();
+				}
+				else if (strcmp(input, quit) == 0)
+				{
+					printf("Quitting..\n");
+					g_isGameRunning = false;
+					g_isRunning = false;
+				}
+				g_turnCount++;
+				if (g_turnCount >= g_characters.size())
+				{
+					g_turnCount = 0;
+				}
+				BitStream bs;
+				bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
+				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 			}
-			else if (strcmp(input, help) == 0)
+			else
 			{
-				//DisplayHelp();
-				DisplayClassInformation();
-			}
-			else if (strcmp(input, quit) == 0)
-			{
-				printf("Quitting..\n");
-				g_isGameRunning = false;
-				g_isRunning = false;
+				system("cls");
+				printf("Please wait for you turn.\n");
 			}
 		}
 		Sleep(100);
@@ -510,6 +528,17 @@ void PacketListener()
 				}
 			}
 			break;
+			case ID_CHATFIGHT_TURN_OVER:
+			{
+				printf("Turn over.\n");
+				g_turnCount++;
+				if (g_turnCount >= g_characters.size())
+				{
+					g_turnCount = 0;
+				}
+				printf("Turn %i.\n", g_turnCount);
+			}
+				break;
 			default:
 				printf("Packet received %i\n", packetIdentifier);
 				break;

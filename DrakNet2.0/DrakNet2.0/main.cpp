@@ -1,18 +1,21 @@
+// RAKNET INCLUDES //
 #include "MessageIdentifiers.h"
 #include "RakPeer.h"
 #include "RakPeerInterface.h"
 #include "ReadyEvent.h"
 #include "FullyConnectedMesh2.h"
 #include "ConnectionGraph2.h"
+// LIBRARY INCLUDES //
 #include "Gets.h"
 #include <thread>
 #include <vector>
+#include <mutex>
+#include <time.h>
+// GAME INCLUDES //
 #include "Wrestler.h"
 #include "Samurai.h"
 #include "Grifter.h"
 #include "Manager.h"
-#include <mutex>
-#include <time.h>
 
 using namespace RakNet;
 
@@ -76,25 +79,6 @@ int main()
 
 	// Start up raknet
 	const unsigned int maxConnections = g_maxPlayers;
-	while (IRNS2_Berkley::IsPortInUse(g_startingPort, "127.0.0.1", AF_INET, SOCK_DGRAM) == true)
-	{
-		g_startingPort++;
-	}
-	SocketDescriptor sd(g_startingPort, "127.0.0.1");
-
-	StartupResult result = g_rakPeerInterface->Startup(maxConnections, &sd, 1);
-	if (result != RAKNET_STARTED)
-	{
-		printf("It just wasn't meant to be, raknet won't start %i\n", result);
-		system("pause");
-		exit(0);
-	}
-	g_rakPeerInterface->SetMaximumIncomingConnections(maxConnections);
-
-	printf("We done it, raknet has started!!\n\n Started Port: %i\n\n", g_startingPort);
-
-	//printf("Start listening for packets.. \n");
-	std::thread packetListenerThread(PacketListener);
 
 	// Start interacting with user
 	printf("Press [y] to connect to a game that has been started.  \nPress anything else to start a new instance of the game.\n");
@@ -103,12 +87,34 @@ int main()
 	if (userInput[0] == 'y' || userInput[0] == 'Y')
 	{
 		printf("\nTime to connect..\n");
+
+		printf("Please enter the IP Address to connect to:\n");
+		char ip[32];
+		Gets(ip, sizeof(ip));
+
 		printf("Please enter the port to connect to:\n");
 		char port[32];
 		Gets(port, sizeof(port));
 		int portNum = atoi(port);
 
-		ConnectionAttemptResult caResult = g_rakPeerInterface->Connect("127.0.0.1", portNum, nullptr, 0);
+		while (IRNS2_Berkley::IsPortInUse(g_startingPort, ip, AF_INET, SOCK_DGRAM) == true)
+		{
+			g_startingPort++;
+		}
+		SocketDescriptor sd(g_startingPort, ip);
+
+		StartupResult result = g_rakPeerInterface->Startup(maxConnections, &sd, 1);
+		if (result != RAKNET_STARTED)
+		{
+			printf("It just wasn't meant to be, raknet won't start %i\n", result);
+			system("pause");
+			exit(0);
+		}
+		g_rakPeerInterface->SetMaximumIncomingConnections(maxConnections);
+
+		printf("We done it, raknet has started!!\n\n Started Port: %i\n\n", g_startingPort);
+
+		ConnectionAttemptResult caResult = g_rakPeerInterface->Connect(ip, portNum, nullptr, 0);
 		if (caResult != CONNECTION_ATTEMPT_STARTED)
 		{
 			printf("It just wasn't meant to be, we can't connect %i\n", result);
@@ -118,6 +124,37 @@ int main()
 
 		printf("CONNECTED!!\n");
 	}
+	else
+	{
+		// Starting a new instance of the game
+		RakNet::SystemAddress sa;
+		printf("\nMy IP addresses:");
+		for (unsigned int i = 0; i < g_rakPeerInterface->GetNumberOfAddresses(); i++)
+		{
+			sa = g_rakPeerInterface->GetInternalID(RakNet::UNASSIGNED_SYSTEM_ADDRESS, i);
+			printf("%i. %s (LAN=%i)\n", i + 1, sa.ToString(false), sa.IsLANAddress());
+		}
+
+		while (IRNS2_Berkley::IsPortInUse(g_startingPort, sa.ToString(false), AF_INET, SOCK_DGRAM) == true)
+		{
+			g_startingPort++;
+		}
+		SocketDescriptor sd(g_startingPort, sa.ToString(false));
+
+		StartupResult result = g_rakPeerInterface->Startup(maxConnections, &sd, 1);
+		if (result != RAKNET_STARTED)
+		{
+			printf("It just wasn't meant to be, raknet won't start %i\n", result);
+			system("pause");
+			exit(0);
+		}
+		g_rakPeerInterface->SetMaximumIncomingConnections(maxConnections);
+
+		printf("We done it, raknet has started!!\n\n Started Port: %i\n\n", g_startingPort);
+	}
+
+	//printf("Start listening for packets.. \n");
+	std::thread packetListenerThread(PacketListener);
 
 	// Ask for confirmation to start the game
 	g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, g_rakPeerInterface->GetMyGUID());

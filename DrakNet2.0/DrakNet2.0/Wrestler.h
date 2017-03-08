@@ -8,7 +8,7 @@ public:
 	~Wrestler();
 
 	void Update() override;
-	void UseAttack() override;
+	void UseAttack(char* enemy = "", int damage = 0) override;
 	void UseHeal() override;
 	void UseSpecial(RakNet::NetworkID playerIDs[], int size) override;
 

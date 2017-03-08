@@ -33,10 +33,10 @@ enum ReadyEventIDs
 
 void PacketListener();
 void InputListener();
-void DisplayHelp();
 void DisplayClassInformation();
 void SetPlayerOrder();
 RakNet::NetworkID GetFastestPlayer();
+int CalculateDamage(int targetNum);
 
 RakPeerInterface* g_rakPeerInterface = nullptr;
 int g_startingPort = 6500;
@@ -48,6 +48,7 @@ std::mutex g_playerMutex;
 std::vector<Character*> g_characters;
 std::vector<RakNet::NetworkID> g_playerIDs;
 int g_turnCount = 0;
+bool g_isWaiting = false;
 int g_maxPlayers = 4;
 
 // Allows for ready events
@@ -82,25 +83,25 @@ int main()
 	StartupResult result = g_rakPeerInterface->Startup(maxConnections, &sd, 1);
 	if (result != RAKNET_STARTED)
 	{
-		printf("It just wasn't meant to be, raknet won't start %i", result);
+		printf("It just wasn't meant to be, raknet won't start %i\n", result);
 		system("pause");
 		exit(0);
 	}
 	g_rakPeerInterface->SetMaximumIncomingConnections(maxConnections);
 
-	printf("We done it, raknet has started!! Started Port: %i\n", g_startingPort);
+	printf("We done it, raknet has started!!\n\n Started Port: %i\n\n", g_startingPort);
 
-	printf("Start listening for packets.. \n");
+	//printf("Start listening for packets.. \n");
 	std::thread packetListenerThread(PacketListener);
 
 	// Start interacting with user
-	printf("Press y to connect to a game that has been started.  Press anything else to start a new instance of the game.\n");
+	printf("Press [y] to connect to a game that has been started.  \nPress anything else to start a new instance of the game.\n");
 	char userInput[32];
 	Gets(userInput, sizeof(userInput));
 	if (userInput[0] == 'y' || userInput[0] == 'Y')
 	{
-		printf("Time to connect.....four\n");
-		printf("please enter the port to connect to\n");
+		printf("\nTime to connect..\n");
+		printf("Please enter the port to connect to:\n");
 		char port[32];
 		Gets(port, sizeof(port));
 		int portNum = atoi(port);
@@ -119,8 +120,9 @@ int main()
 	// Ask for confirmation to start the game
 	g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, g_rakPeerInterface->GetMyGUID());
 
-	printf("ARE YOU READY TO CHAT FIGHT!?\n");
-	printf("Type in y followed by enter if you are ready...\n\n");
+	printf("#################################\n");
+	printf("\n\nAre you ready to CHAT FIGHT!?\n\n");
+	printf("Type in [y] followed by enter if you are ready...\n\n");
 	Gets(userInput, sizeof(userInput));
 	if (userInput[0] == 'y' || userInput[0] == 'Y')
 	{
@@ -141,38 +143,38 @@ int main()
 
 		bool answered = false;
 		do {
-			printf("Choose your class:\n");
-			printf("Type 'wrestler' for wrestler\n");
-			printf("Type 'samurai' for samurai\n");
-			printf("Type 'grifter' for grifter\n");
-			printf("Type 'manager' for manager\n");
-			printf("Type 'help' for character class descriptions\n");
+			printf("#################################\n\n");
+			printf("-= Choose your class: =-\n");
+			printf("    Type 'wrestler' for wrestler\n");
+			printf("    Type 'samurai' for samurai\n");
+			printf("    Type 'grifter' for grifter\n");
+			printf("    Type 'manager' for manager\n");
+			printf("    Type 'help' for character class descriptions\n\n");
 
 			Gets(userInput, sizeof(userInput));
-
 			system("cls");
 
 			if (strcmp(userInput, wrestler) == 0)
 			{
-				printf("You chose the wrestler.\n");
+				printf("    You chose the wrestler.\n");
 				chosenClass = E_CCWrestler;
 				answered = true;
 			}
 			else if (strcmp(userInput, samurai) == 0)
 			{
-				printf("You chose the samurai.\n");
+				printf("    You chose the samurai.\n");
 				chosenClass = E_CCSamurai;
 				answered = true;
 			}
 			else if (strcmp(userInput, grifter) == 0)
 			{
-				printf("You chose the grifer.\n");
+				printf("    You chose the grifer.\n");
 				chosenClass = E_CCGrifter;
 				answered = true;
 			}
 			else if (strcmp(userInput, manager) == 0)
 			{
-				printf("You chose the manager.\n");
+				printf("    You chose the manager.\n");
 				chosenClass = E_CCManager;
 				answered = true;
 			}
@@ -188,7 +190,7 @@ int main()
 			if (answered)
 			{
 				int answer;
-				printf("You have 10 bonus stat points. You can assign them however you want.\n");
+				printf("\nYou have 10 bonus stat points. You can assign them however you want.\n");
 
 				// Assign to HP
 				printf("How many points do you want to add to your HP stat?\n");
@@ -268,6 +270,8 @@ int main()
 		g_characters.insert(g_characters.begin(), character);
 		g_playerMutex.unlock();
 
+		printf("Please wait for the other players to create their characters.\n");
+
 		// Set ready event to start the game
 		g_readyEventPlugin.SetEvent(ID_RE_PLAYER_JOIN, true);
 		std::thread inputListenerThread(InputListener);
@@ -286,12 +290,12 @@ int main()
 
 void InputListener()
 {
-	static char* attack = "attack";
-	static char* stats = "stats";
-	static char* help = "help";
-	static char* quit = "quit";
-
-	DisplayHelp();
+	static char* attack = "1";
+	static char* special = "2";
+	static char* heal = "3";
+	static char* stats = "4";
+	static char* info = "5";
+	static char* quit = "q";
 
 	while (g_isRunning)
 	{
@@ -299,77 +303,142 @@ void InputListener()
 		{
 			if (g_characters[0]->IsTurn(g_turnCount))
 			{
-				system("cls");
-				printf("Your turn.\n");
-				char input[32];
-				Gets(input, sizeof(input));
-				system("cls");
-
-				if (strcmp(input, attack) == 0)
+				g_isWaiting = false;
+				bool actionComplete = false;
+				bool targetChosen = false;
+				int target;
+				char tempTargetName[32];
+				while (!actionComplete)
 				{
-					printf("Attacking..\n");
-
-					// Send packet telling the world we are accelerating
-					//BitStream bs;
-					//bs.Write((unsigned char)ID_GB3_ACCELERATE);
-					//bs.Write(g_racers[0]->GetNetworkID());
-					//g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
-				}
-				else if (strcmp(input, stats) == 0)
-				{
-					g_playerMutex.lock();
-					for each(Character* character in g_characters)
+					char input[32];
+					if (!targetChosen)
 					{
-						character->DisplayStats();
+						// Target select
+						printf("\n\n\nYour turn, choose a target.\n");
+						g_playerMutex.lock();
+						int i = 0;
+						for each(Character* character in g_characters)
+						{
+							if (i > 0)
+							{
+								printf("    [%i] ", i);
+								printf(character->GetName());
+								printf("\n");
+							}
+							i++;
+						}
+						g_playerMutex.unlock();
+						printf("Type in the player number to target: \n");
+
+						do {
+							Gets(input, sizeof(input));
+							target = atoi(input);
+							if (target > 0 && target < i)
+							{
+								g_characters[0]->SetTarget(g_characters[target]->GetNetworkID());
+								strcpy(tempTargetName, g_characters[target]->GetName());
+								targetChosen = true;
+							}
+							else
+							{
+								printf("Unknown target.  Please try again:\n");
+							}
+						} while (!targetChosen);
+						system("cls");
 					}
-					g_playerMutex.unlock();
+					
+					printf("What Action do you want to do?\n\n");
+					printf("    [1] Attack %s\n", tempTargetName);
+					printf("    [2] Use your special attack\n");
+					printf("    [3] Heal yourself\n");
+					printf("    [4] View all player stats\n");
+					printf("    [5] Display class information\n");
+					printf("    [q] QUIT\n\n");
+
+					Gets(input, sizeof(input));
+					system("cls");
+
+					if (strcmp(input, attack) == 0)
+					{
+						g_characters[0]->UseAttack();
+						actionComplete = true;
+						int damage = CalculateDamage(target);
+						if (damage == 0)
+							printf("%s dodged your attack.\n", g_characters[target]->GetName());
+
+						// Set damage locally
+						g_characters[target]->SetDamage(-damage);
+
+						// Send packet telling the world we attack the chosen player for a certain amount of damage
+						BitStream bs;
+						bs.Write((unsigned char)ID_CHATFIGHT_ATTACK);
+						bs.Write(g_characters[0]->GetNetworkID());
+						bs.Write(g_characters[0]->GetTarget());
+						bs.Write(damage);
+						bs.Write(tempTargetName);
+						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+					}
+					else if (strcmp(input, special) == 0)
+					{
+						printf("Using special attack\n");
+						actionComplete = true;
+					}
+					else if (strcmp(input, heal) == 0)
+					{
+						printf("Healing\n");
+						actionComplete = true;
+					}
+					else if (strcmp(input, stats) == 0)
+					{
+						g_playerMutex.lock();
+						for each(Character* character in g_characters)
+						{
+							character->DisplayStats();
+						}
+						g_playerMutex.unlock();
+					}
+					else if (strcmp(input, info) == 0)
+					{
+						DisplayClassInformation();
+					}
+					else if (strcmp(input, quit) == 0)
+					{
+						printf("Quitting..\n");
+						g_isGameRunning = false;
+						g_isRunning = false;
+					}
+
+					if (actionComplete)
+					{
+						// Turn over
+						g_turnCount++;
+						if (g_turnCount >= g_characters.size())
+						{
+							g_turnCount = 0;
+						}
+						BitStream bs;
+						bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
+						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+					}
 				}
-				else if (strcmp(input, help) == 0)
-				{
-					//DisplayHelp();
-					DisplayClassInformation();
-				}
-				else if (strcmp(input, quit) == 0)
-				{
-					printf("Quitting..\n");
-					g_isGameRunning = false;
-					g_isRunning = false;
-				}
-				g_turnCount++;
-				if (g_turnCount >= g_characters.size())
-				{
-					g_turnCount = 0;
-				}
-				BitStream bs;
-				bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
-				g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 			}
 			else
 			{
-				system("cls");
-				printf("Please wait for you turn.\n");
+				if (!g_isWaiting)
+				{
+					system("cls");
+					printf("Please wait for you turn.\n\n");
+					g_isWaiting = true;
+				}
 			}
 		}
 		Sleep(100);
 	}
 }
 
-void DisplayHelp()
-{
-	printf("************************************************\n");
-	printf("******************RACER STATS*******************\n");
-	printf("'go' = Accelerate\n");
-	printf("'stop' = Brake\n");
-	printf("'stats'  = Racer Stats\n");
-	printf("'help' = This\n");
-	printf("'quit'  = Quit game\n");
-	printf("************************************************\n");
-	printf("************************************************\n");
-}
-
 void PacketListener()
 {
-	printf("Listening for packets..\n");
+	//printf("Listening for packets..\n");
 	Packet* packet;
 
 	while (g_isRunning)
@@ -383,16 +452,16 @@ void PacketListener()
 			switch (packetIdentifier)
 			{
 			case ID_CONNECTION_REQUEST_ACCEPTED:
-				printf("ID_CONNECTION_REQUEST_ACCEPTED\n");
+				printf("\nCONNECTION REQUEST ACCEPTED\n\n");
 				g_readyEventPlugin.AddToWaitList(ID_RE_PLAYER_JOIN, packet->guid);
 				g_readyEventPlugin.AddToWaitList(ID_RE_CHARACTERS_SELECTED, packet->guid);
 				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
 				break;
 			case ID_CONNECTION_ATTEMPT_FAILED:
-				printf("ID_CONNECTION_ATTEMPT_FAILED\n");
+				printf("CONNECTION ATTEMPT FAILED\n");
 				break;
 			case ID_ALREADY_CONNECTED:
-				printf("ID_ALREADY_CONNECTED\n");
+				printf("ALREADY CONNECTED\n");
 				break;
 			case ID_NEW_INCOMING_CONNECTION:
 				printf("** New player connected. **\n");
@@ -401,13 +470,13 @@ void PacketListener()
 				g_readyEventPlugin.AddToWaitList(ID_RE_GAME_OVER, packet->guid);
 				break;
 			case ID_NO_FREE_INCOMING_CONNECTIONS:
-				printf("ID_NO_FREE_INCOMING_CONNECTIONS\n");
+				//printf("ID_NO_FREE_INCOMING_CONNECTIONS\n");
 				break;
 			case ID_READY_EVENT_SET:
-				printf("ID_READY_EVENT_SET\n");
+				//printf("ID_READY_EVENT_SET\n");
 				break;
 			case ID_READY_EVENT_ALL_SET:
-				printf("ID_READY_EVENT_ALL_SET\n");
+				//printf("ID_READY_EVENT_ALL_SET\n");
 				{
 					BitStream bs(packet->data, packet->length, false);
 					bs.IgnoreBytes(sizeof(MessageID));
@@ -438,7 +507,7 @@ void PacketListener()
 
 					if (readyEventId == ID_RE_CHARACTERS_SELECTED)
 					{
-						printf("All players have selected their characters.\n");
+						printf("All players have selected their characters.\n\n");
 						//g_playerMutex.lock();
 						//for each(Character* character in g_characters)
 						//{
@@ -449,15 +518,16 @@ void PacketListener()
 						SetPlayerOrder();
 
 						g_isGameRunning = true;
+						//system("cls");
 					}
 				}
 				break;
 			case ID_READY_EVENT_UNSET:
-				printf("ID_READY_EVENT_UNSET\n");
+				//printf("ID_READY_EVENT_UNSET\n");
 				break;
 			case ID_CHATFIGHT_CREATE_CHARACTER:
 			{
-				printf("creating replica...\n");
+				//printf("creating replica...\n");
 				BitStream bs(packet->data, packet->length, false);
 				bs.IgnoreBytes(sizeof(MessageID));
 				NetworkID netID;
@@ -520,27 +590,59 @@ void PacketListener()
 						g_characters.push_back(newCharacter);
 						g_playerMutex.unlock();
 					}
-					printf("Replica created.\n");
+					//printf("Replica created.\n");
 				}
 				else
 				{
-					printf("Replica already created.\n");
+					//printf("Replica already created.\n");
 				}
 			}
 			break;
 			case ID_CHATFIGHT_TURN_OVER:
 			{
-				printf("Turn over.\n");
+				printf("\nNext turn.\n");
 				g_turnCount++;
 				if (g_turnCount >= g_characters.size())
 				{
 					g_turnCount = 0;
 				}
-				printf("Turn %i.\n", g_turnCount);
+				//printf("Turn %i.\n", g_turnCount);
+			}
+				break;
+			case ID_CHATFIGHT_ATTACK:
+			{
+				BitStream bs(packet->data, packet->length, false);
+				bs.IgnoreBytes(sizeof(MessageID));
+				NetworkID netID1;
+				bs.Read(netID1);
+				NetworkID netID2;
+				bs.Read(netID2);
+				int damage;
+				bs.Read(damage);
+				char targetName[32];
+				bs.Read(targetName);
+
+				// Do damage locally
+				for (int i = 0; i < g_characters.size(); i++)
+				{
+					if (g_characters[i]->GetNetworkID() == netID1)
+					{
+						printf(">> ");
+						g_characters[i]->UseAttack(targetName, damage);
+					}
+					if (g_characters[i]->GetNetworkID() == netID2)
+					{
+						if (damage == 0)
+							printf(">> %s dodged the attack.\n", g_characters[i]->GetName());
+
+						// Set damage locally
+						g_characters[i]->SetDamage(-damage);
+					}
+				}
 			}
 				break;
 			default:
-				printf("Packet received %i\n", packetIdentifier);
+				//printf("Packet received %i\n", packetIdentifier);
 				break;
 			}
 		}
@@ -688,4 +790,53 @@ RakNet::NetworkID GetFastestPlayer()
 
 		return fastestPlayer;
 	}
+}
+
+int CalculateDamage(int targetNum)
+{
+	int finalDamage = 1;
+
+	int p1Speed = g_characters[0]->GetSpeed();
+	int p2Speed = g_characters[targetNum]->GetSpeed();
+	int p1Atk = g_characters[0]->GetAttack();
+	int p2Def = g_characters[targetNum]->GetDefence();
+
+	if (p1Speed > p2Speed)
+	{
+		// Calculate critical hit
+		int randNum = rand() % (p1Speed + p2Speed) + 1;
+
+		if (randNum > p2Speed && randNum < p1Speed)
+		{
+			// Critical hit
+			finalDamage = p1Atk - (p2Def/2);
+			if (finalDamage <= 0)
+				finalDamage = 5;
+		}
+		else
+		{
+			finalDamage = p1Atk - p2Def;
+			if (finalDamage <= 0)
+				finalDamage = 1;
+		}
+	}
+	else
+	{
+		// Calculate dodge
+		int randNum = rand() % (p1Speed + p2Speed) + 1;
+
+		if (randNum > p1Speed && randNum < p2Speed)
+		{
+			// Dodge
+			finalDamage = 0;
+		}
+		else
+		{
+			finalDamage = p1Atk - p2Def;
+			if (finalDamage <= 0)
+				finalDamage = 1;
+		}
+	}
+
+	return finalDamage;
 }

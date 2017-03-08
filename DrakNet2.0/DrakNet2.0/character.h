@@ -23,7 +23,7 @@ public:
 	CharacterClasses GetClass();
 
 	virtual void Update() = 0;	// Update updates the character at the begining of their turn
-	virtual void UseAttack() = 0;
+	virtual void UseAttack(char* enemy = "", int damage = 0) = 0;
 	virtual void UseHeal() = 0;
 	virtual void UseSpecial(RakNet::NetworkID playerIDs[], int size) = 0;
 

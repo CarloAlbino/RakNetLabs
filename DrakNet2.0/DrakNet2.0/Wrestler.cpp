@@ -40,9 +40,12 @@ void Wrestler::Update()
 	}
 }
 
-void Wrestler::UseAttack()
+void Wrestler::UseAttack(char* enemy, int damage)
 {
-	printf("You piledrived the enemy.\n");
+	if (m_isMaster)
+		printf("You piledrived the enemy.\n");
+	else
+		printf("%s piledrived %s for %i damage.\n", m_name, enemy, damage);
 	// find class of targeted player with targetedID and attack
 	// compare with target's defence and speed.
 }

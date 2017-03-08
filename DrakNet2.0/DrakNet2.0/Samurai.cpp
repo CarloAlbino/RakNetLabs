@@ -31,9 +31,12 @@ void Samurai::Update()
 {
 }
 
-void Samurai::UseAttack()
+void Samurai::UseAttack(char* enemy, int damage)
 {
-	printf("You use your slashed at the enemy.\n");
+	if (m_isMaster)
+		printf("You slashed at the enemy with your katana.\n");
+	else
+		printf("%s slashed at %s with their katana for %i damage.\n", m_name, enemy, damage);
 	// find class of targeted player with targetedID and attack
 	// compare with target's defence and speed.
 }

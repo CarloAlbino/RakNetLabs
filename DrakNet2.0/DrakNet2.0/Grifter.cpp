@@ -39,9 +39,12 @@ void Grifter::Update()
 	}
 }
 
-void Grifter::UseAttack()
+void Grifter::UseAttack(char* enemy, int damage)
 {
-	printf("You conned the enemy to punch themselves.\n");
+	if (m_isMaster)
+		printf("You conned the enemy to punch themselves in the face.\n");
+	else
+		printf("%s conned %s to punch themselves in the face for %i damage.\n", m_name, enemy, damage);
 	// find class of targeted player with targetedID and attack
 	// compare with target's defence and speed.
 }

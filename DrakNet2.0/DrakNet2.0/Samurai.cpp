@@ -3,7 +3,7 @@
 Samurai::Samurai(char* name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
 {
 	m_isMaster = false;
-	m_name = name;
+	strcpy(m_name, name);
 	m_class = E_CCSamurai;
 	m_currentTarget = 0;
 
@@ -44,16 +44,25 @@ void Samurai::UseAttack(char* enemy, int damage)
 void Samurai::UseHeal()
 {
 	int healPercent = (float)m_maxHealth * 0.17f;
-	printf("You sat and rested.  You healed yourself for %i health.\n", healPercent);
 	SetDamage(healPercent);
+	if(m_isMaster)
+		printf("You sat and rested.  You healed yourself for %i health.\n", healPercent);
+	else
+		printf("%s sat and rested.  They healed for %i health.\n", m_name, healPercent);
+
 }
 
-void Samurai::UseSpecial(RakNet::NetworkID playerIDs[], int size)
+void Samurai::UseSpecial(std::vector<Character*> players)
 {
-	printf("You unleash a flurry of attacks. \nYou hit all other fighters, doing 6 damage to all.\n");
-	for (int i = 0; i < size; i++)
+	if (m_isMaster)
+		printf("You unleash a flurry of attacks. \nYou hit all other fighters, doing 3 damage to all.\n");
+	else
+		printf("%s unleashes a flurry of attacks. \nThey hit all other fighters, doing 3 damage to all.\n", m_name);
+	for (int i = 0; i < players.size(); i++)
 	{
-		// Get class from ID and damage
-		// compare with target's defence and speed.
+		if (players[i]->GetNetworkID() != this->GetNetworkID())
+		{
+			players[i]->SetDamage(-3);
+		}
 	}
 }

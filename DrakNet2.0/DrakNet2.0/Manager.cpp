@@ -3,7 +3,7 @@
 Manager::Manager(char* name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
 {
 	m_isMaster = false;
-	m_name = name;
+	strcpy(m_name, name);
 	m_class = E_CCManager;
 	m_currentTarget = 0;
 
@@ -35,6 +35,8 @@ void Manager::Update()
 		if (m_spTurnsRemaining == 0)
 		{
 			m_defence = m_defaultDefence;
+			if (m_isMaster)
+				printf("Your stat boost have worn off.\n");
 		}
 	}
 }
@@ -52,14 +54,32 @@ void Manager::UseAttack(char* enemy, int damage)
 void Manager::UseHeal()
 {
 	int healPercent = (float)m_maxHealth * 0.1f;
-	printf("You took a 2 hour lunch break, yet you're still complaining.  You healed yourself for %i health.\n", healPercent);
 	SetDamage(healPercent);
+	if (m_isMaster)
+	{
+		printf("You took a 2 hour lunch break, yet you're still complaining.  You healed yourself for %i health.\n", m_name, healPercent);
+	}
+	else
+	{
+		printf("%s took a 2 hour lunch break, yet is still complaining.  They healed for %i health.\n", m_name, healPercent);
+	}
 }
 
-void Manager::UseSpecial(RakNet::NetworkID playerIDs[], int size)
+void Manager::UseSpecial(std::vector<Character*> players)
 {
-	printf("You throw your employees at the customers.  You triple your defences!\n");
-	m_spTurnsRemaining = 3;
+	if (m_isMaster)
+		printf("You throw your employees at the customers.  You triple your defences!\n");
+	else
+		printf("%s throws their employees at the customers.  %s triple their defences!\n", m_name, m_name);
+
+	m_spTurnsRemaining = 7;
 	m_defence *= 3;
 	// Attack target for a little damage
+	for each(Character* p in players)
+	{
+		if (p->GetNetworkID() == GetTarget())
+		{
+			p->SetDamage(-2);
+		}
+	}
 }

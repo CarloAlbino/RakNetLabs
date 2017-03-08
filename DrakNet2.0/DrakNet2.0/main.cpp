@@ -12,6 +12,7 @@
 #include "Grifter.h"
 #include "Manager.h"
 #include <mutex>
+#include <time.h>
 
 using namespace RakNet;
 
@@ -60,6 +61,7 @@ RakNet::NetworkIDManager g_networkIDManager;
 
 int main()
 {
+	srand(time(NULL));
 	// Set up rak peer interface
 	g_rakPeerInterface = RakPeerInterface::GetInstance();
 
@@ -308,125 +310,163 @@ void InputListener()
 				bool targetChosen = false;
 				int target;
 				char tempTargetName[32];
-				while (!actionComplete)
+				if (g_characters[0]->CanAttack())
 				{
-					char input[32];
-					if (!targetChosen)
+					while (!actionComplete)
 					{
-						// Target select
-						printf("\n\n\nYour turn, choose a target.\n");
-						g_playerMutex.lock();
-						int i = 0;
-						for each(Character* character in g_characters)
+						char input[32];
+						if (!targetChosen)
 						{
-							if (i > 0)
+							// Target select
+							printf("\n\n\nYour turn, choose a target.\n");
+							g_playerMutex.lock();
+							int i = 0;
+							int numOfOptions = 0;
+							for each(Character* character in g_characters)
 							{
-								printf("    [%i] ", i);
-								printf(character->GetName());
-								printf("\n");
+								if (i > 0)
+								{
+									if (character->CanAttack())
+									{
+										printf("    [%i] ", i);
+										printf(character->GetName());
+										printf("\n");
+										numOfOptions++;
+									}
+								}
+								i++;
 							}
-							i++;
-						}
-						g_playerMutex.unlock();
-						printf("Type in the player number to target: \n");
+							g_playerMutex.unlock();
 
-						do {
-							Gets(input, sizeof(input));
-							target = atoi(input);
-							if (target > 0 && target < i)
+							if (numOfOptions == 0)
 							{
-								g_characters[0]->SetTarget(g_characters[target]->GetNetworkID());
-								strcpy(tempTargetName, g_characters[target]->GetName());
-								targetChosen = true;
+								// Game over, you win.
+								g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, true);
 							}
 							else
 							{
-								printf("Unknown target.  Please try again:\n");
+								printf("Type in the player number to target: \n");
 							}
-						} while (!targetChosen);
+
+							do {
+								Gets(input, sizeof(input));
+								target = atoi(input);
+								if (target > 0 && target < i && g_characters[target]->CanAttack())
+								{
+									g_characters[0]->SetTarget(g_characters[target]->GetNetworkID());
+									strcpy(tempTargetName, g_characters[target]->GetName());
+									targetChosen = true;
+								}
+								else
+								{
+									printf("Unknown target.  Please try again:\n");
+								}
+							} while (!targetChosen);
+							system("cls");
+						}
+
+						printf("What Action do you want to do?\n\n");
+						printf("    [1] Attack %s\n", tempTargetName);
+						printf("    [2] Use your special attack\n");
+						printf("    [3] Heal yourself\n");
+						printf("    [4] View all player stats\n");
+						printf("    [5] Display class information\n");
+						printf("    [q] QUIT\n\n");
+
+						Gets(input, sizeof(input));
 						system("cls");
-					}
-					
-					printf("What Action do you want to do?\n\n");
-					printf("    [1] Attack %s\n", tempTargetName);
-					printf("    [2] Use your special attack\n");
-					printf("    [3] Heal yourself\n");
-					printf("    [4] View all player stats\n");
-					printf("    [5] Display class information\n");
-					printf("    [q] QUIT\n\n");
 
-					Gets(input, sizeof(input));
-					system("cls");
-
-					if (strcmp(input, attack) == 0)
-					{
-						g_characters[0]->UseAttack();
-						actionComplete = true;
-						int damage = CalculateDamage(target);
-						if (damage == 0)
-							printf("%s dodged your attack.\n", g_characters[target]->GetName());
-
-						// Set damage locally
-						g_characters[target]->SetDamage(-damage);
-
-						// Send packet telling the world we attack the chosen player for a certain amount of damage
-						BitStream bs;
-						bs.Write((unsigned char)ID_CHATFIGHT_ATTACK);
-						bs.Write(g_characters[0]->GetNetworkID());
-						bs.Write(g_characters[0]->GetTarget());
-						bs.Write(damage);
-						bs.Write(tempTargetName);
-						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
-					}
-					else if (strcmp(input, special) == 0)
-					{
-						printf("Using special attack\n");
-						actionComplete = true;
-					}
-					else if (strcmp(input, heal) == 0)
-					{
-						printf("Healing\n");
-						actionComplete = true;
-					}
-					else if (strcmp(input, stats) == 0)
-					{
-						g_playerMutex.lock();
-						for each(Character* character in g_characters)
+						if (strcmp(input, attack) == 0)
 						{
-							character->DisplayStats();
-						}
-						g_playerMutex.unlock();
-					}
-					else if (strcmp(input, info) == 0)
-					{
-						DisplayClassInformation();
-					}
-					else if (strcmp(input, quit) == 0)
-					{
-						printf("Quitting..\n");
-						g_isGameRunning = false;
-						g_isRunning = false;
-					}
+							g_characters[0]->UseAttack();
+							actionComplete = true;
+							int damage = CalculateDamage(target);
+							if (damage == 0)
+								printf("%s dodged your attack.\n", g_characters[target]->GetName());
 
-					if (actionComplete)
-					{
-						// Turn over
-						g_turnCount++;
-						if (g_turnCount >= g_characters.size())
-						{
-							g_turnCount = 0;
+							// Set damage locally
+							g_characters[target]->SetDamage(-damage);
+
+							// Send packet telling the world we attack the chosen player for a certain amount of damage
+							BitStream bs;
+							bs.Write((unsigned char)ID_CHATFIGHT_ATTACK);
+							bs.Write(g_characters[0]->GetNetworkID());
+							bs.Write(g_characters[0]->GetTarget());
+							bs.Write(damage);
+							bs.Write(tempTargetName);
+							g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 						}
-						BitStream bs;
-						bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
-						g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+						else if (strcmp(input, special) == 0)
+						{
+							g_characters[0]->UseSpecial(g_characters);
+							actionComplete = true;
+							// Send packet telling the world we used special
+							BitStream bs;
+							bs.Write((unsigned char)ID_CHATFIGHT_SPECIAL);
+							bs.Write(g_characters[0]->GetNetworkID());
+							g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+						}
+						else if (strcmp(input, heal) == 0)
+						{
+							g_characters[0]->UseHeal();
+							actionComplete = true;
+							// Send packet telling the world we healed
+							BitStream bs;
+							bs.Write((unsigned char)ID_CHATFIGHT_HEAL);
+							bs.Write(g_characters[0]->GetNetworkID());
+							g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+						}
+						else if (strcmp(input, stats) == 0)
+						{
+							g_playerMutex.lock();
+							for each(Character* character in g_characters)
+							{
+								character->DisplayStats();
+							}
+							g_playerMutex.unlock();
+						}
+						else if (strcmp(input, info) == 0)
+						{
+							DisplayClassInformation();
+						}
+						else if (strcmp(input, quit) == 0)
+						{
+							printf("Quitting..\n");
+							g_isGameRunning = false;
+							g_isRunning = false;
+						}
+
+						if (actionComplete)
+						{
+							// Turn over
+							g_turnCount++;
+							if (g_turnCount >= g_characters.size())
+							{
+								g_turnCount = 0;
+							}
+							BitStream bs;
+							bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
+							g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
+						}
 					}
+				}
+				else
+				{
+					// Can't attack you turn is over
+					g_turnCount++;
+					if (g_turnCount >= g_characters.size())
+					{
+						g_turnCount = 0;
+					}
+					BitStream bs;
+					bs.Write((unsigned char)ID_CHATFIGHT_TURN_OVER);
+					g_rakPeerInterface->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, UNASSIGNED_SYSTEM_ADDRESS, true);
 				}
 			}
 			else
 			{
 				if (!g_isWaiting)
 				{
-					system("cls");
 					printf("Please wait for you turn.\n\n");
 					g_isWaiting = true;
 				}
@@ -520,6 +560,27 @@ void PacketListener()
 						g_isGameRunning = true;
 						//system("cls");
 					}
+
+					if (readyEventId == ID_RE_GAME_OVER)
+					{
+						// GAME OVER
+						system("cls");
+						printf("The CHAT FIGHT is over!!\n");
+						g_playerMutex.lock();
+						for each(Character* c in g_characters)
+						{
+							if (c->CanAttack())
+							{
+								printf("The winner is %s!!\n\n", c->GetName());
+								printf("Thanks for playing!!\n");
+							}
+						}
+						g_playerMutex.unlock();
+						g_isGameRunning = false;
+						g_isRunning = false;
+						char in[32];
+						Gets(in, sizeof(in));
+					}
 				}
 				break;
 			case ID_READY_EVENT_UNSET:
@@ -534,6 +595,18 @@ void PacketListener()
 				bs.Read(netID);
 				CharacterClasses charClass;
 				bs.Read(charClass);
+
+				char nameInput[32];
+				int hpBoost;
+				int atkBoost;
+				int defBoost;
+				int spdBoost;
+
+				bs.Read(nameInput);
+				bs.Read(hpBoost);
+				bs.Read(atkBoost);
+				bs.Read(defBoost);
+				bs.Read(spdBoost);
 
 				// Check first to see if the replica already exists
 				bool canContinue = true;
@@ -550,18 +623,6 @@ void PacketListener()
 				if (canContinue)
 				{
 					Character* newCharacter = new Wrestler("name", 0, 0, 0, 0);
-					char nameInput[32];
-					int hpBoost;
-					int atkBoost;
-					int defBoost;
-					int spdBoost;
-
-					bs.Read(nameInput);
-					bs.Read(hpBoost);
-					bs.Read(atkBoost);
-					bs.Read(defBoost);
-					bs.Read(spdBoost);
-
 					switch (charClass)
 					{
 					case E_CCWrestler:
@@ -600,7 +661,19 @@ void PacketListener()
 			break;
 			case ID_CHATFIGHT_TURN_OVER:
 			{
-				printf("\nNext turn.\n");
+				//printf("\nNext turn.\n");
+				if (!g_characters[0]->CanAttack())
+				{
+					printf("You are dead. You can no longer play.\nPlease wait for the game to be over.\n");
+					g_readyEventPlugin.SetEvent(ID_RE_GAME_OVER, true);
+				}
+				g_playerMutex.lock();
+				for each(Character* c in g_characters)
+				{
+					// Update all characters once per turn
+					c->Update();
+				}
+				g_playerMutex.unlock();
 				g_turnCount++;
 				if (g_turnCount >= g_characters.size())
 				{
@@ -641,6 +714,40 @@ void PacketListener()
 				}
 			}
 				break;
+			case ID_CHATFIGHT_SPECIAL:
+			{
+				BitStream bs(packet->data, packet->length, false);
+				bs.IgnoreBytes(sizeof(MessageID));
+				NetworkID netID;
+				bs.Read(netID);
+
+				for each(Character* c in g_characters)
+				{
+					if (c->GetNetworkID() == netID)
+					{
+						printf(">> ");
+						c->UseSpecial(g_characters);
+					}
+				}
+			}
+				break;
+			case ID_CHATFIGHT_HEAL:
+			{
+				BitStream bs(packet->data, packet->length, false);
+				bs.IgnoreBytes(sizeof(MessageID));
+				NetworkID netID;
+				bs.Read(netID);
+
+				for each(Character* c in g_characters)
+				{
+					if (c->GetNetworkID() == netID)
+					{
+						printf(">> ");
+						c->UseHeal();
+					}
+				}
+			}
+			break;
 			default:
 				//printf("Packet received %i\n", packetIdentifier);
 				break;
@@ -663,7 +770,7 @@ void DisplayClassInformation()
 	printf("BASE SPEED: 8\n");
 	printf("-----------------------------------------------\n");
 	printf("SPECIAL ATTACK:\n");
-	printf("Attack x2, Speed x1.5 for 3 turns.\n");
+	printf("Attack x2, Speed x1.5 for 7 turns.\n");
 	printf("Heal 25%s on the turn you use your special.\n", "%");
 	printf("-----------------------------------------------\n");
 
@@ -692,7 +799,7 @@ void DisplayClassInformation()
 	printf("BASE SPEED: 12\n");
 	printf("-----------------------------------------------\n");
 	printf("SPECIAL ATTACK:\n");
-	printf("Speed x3 for 3 turns.\n");
+	printf("Speed x3 for 7 turns.\n");
 	printf("Attack a target for 5 damage.\n");
 	printf("-----------------------------------------------\n");
 
@@ -707,7 +814,7 @@ void DisplayClassInformation()
 	printf("BASE SPEED: 1\n");
 	printf("-----------------------------------------------\n");
 	printf("SPECIAL ATTACK:\n");
-	printf("Defence x3 for 3 turns.\n");
+	printf("Defence x3 for 7 turns.\n");
 	printf("Attack a target for 1 damage.\n");
 	printf("-----------------------------------------------\n");
 }

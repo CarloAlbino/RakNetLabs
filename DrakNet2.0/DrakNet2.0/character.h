@@ -25,7 +25,7 @@ public:
 	virtual void Update() = 0;	// Update updates the character at the begining of their turn
 	virtual void UseAttack(char* enemy = "", int damage = 0) = 0;
 	virtual void UseHeal() = 0;
-	virtual void UseSpecial(RakNet::NetworkID playerIDs[], int size) = 0;
+	virtual void UseSpecial(std::vector<Character*> players) = 0;
 
 	bool CanAttack();
 
@@ -53,7 +53,7 @@ protected:
 	char* GetCharClassName(CharacterClasses c);
 
 protected:
-	char* m_name;
+	char m_name[32];
 	CharacterClasses m_class;
 	std::vector<RakNet::NetworkID> m_playerAtkOrder;
 	int m_turnNum;

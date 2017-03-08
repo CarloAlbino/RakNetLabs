@@ -3,7 +3,7 @@
 Grifter::Grifter(char* name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
 {
 	m_isMaster = false;
-	m_name = name;
+	strcpy(m_name, name);
 	m_class = E_CCGrifter;
 	m_currentTarget = 0;
 
@@ -35,6 +35,8 @@ void Grifter::Update()
 		if (m_spTurnsRemaining == 0)
 		{
 			m_speed = m_defaultSpeed;
+			if (m_isMaster)
+				printf("Your stat boost have worn off.\n");
 		}
 	}
 }
@@ -52,14 +54,29 @@ void Grifter::UseAttack(char* enemy, int damage)
 void Grifter::UseHeal()
 {
 	int healPercent = (float)m_maxHealth * 0.5f;
-	printf("You tricked your enemies into healing you. \nYou healed yourself for %i health.\n", healPercent);
 	SetDamage(healPercent);
+	if(m_isMaster)
+		printf("You tricked your enemies into healing you. \nYou are healed for %i health.\n", healPercent);
+	else
+		printf("%s tricked you into healing them. \n%s is healed for %i health.\n", m_name, m_name, healPercent);
+
 }
 
-void Grifter::UseSpecial(RakNet::NetworkID playerIDs[], int size)
+void Grifter::UseSpecial(std::vector<Character*> players)
 {
-	printf("Your so tricky that your speed was tripled!\n");
-	m_spTurnsRemaining = 3;
+	if(m_isMaster)
+		printf("Your so tricky that your speed was tripled!\n");
+	else
+		printf("%s is so tricky that their speed was tripled!\n", m_name);
+
+	m_spTurnsRemaining = 7;
 	m_speed *= 3;
 	// Attack target for massive damage
+	for each(Character* p in players)
+	{
+		if (p->GetNetworkID() == GetTarget())
+		{
+			p->SetDamage(-5);
+		}
+	}
 }

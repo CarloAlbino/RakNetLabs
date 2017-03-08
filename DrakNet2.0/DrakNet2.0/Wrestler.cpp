@@ -3,7 +3,7 @@
 Wrestler::Wrestler(char* name, int healthBoost, int atkBoost, int defBoost, int spdBoost)
 {
 	m_isMaster = false;
-	m_name = name;
+	strcpy(m_name, name);
 	m_class = E_CCWrestler;
 	m_currentTarget = 0;
 
@@ -36,6 +36,8 @@ void Wrestler::Update()
 		{
 			m_attack = m_defaultAttack;
 			m_speed = m_defaultSpeed;
+			if (m_isMaster)
+				printf("Your stat boost have worn off.\n");
 		}
 	}
 }
@@ -53,18 +55,30 @@ void Wrestler::UseAttack(char* enemy, int damage)
 void Wrestler::UseHeal()
 {
 	int healPercent = (float)m_maxHealth * 0.22f;
-	printf("You pretended to be hurt while your enemies thought they were winning. \nYou healed yourself for %i health.\n", healPercent);
 	SetDamage(healPercent);
+
+	if(m_isMaster)
+		printf("You pretended to be hurt while your enemies thought they were winning. \nYou healed yourself for %i health.\n", healPercent);
+	else
+		printf("%s pretended to be hurt while you thought they were winning. \n%s healed themselves for %i health.\n", m_name, m_name, healPercent);
+
 }
 
-void Wrestler::UseSpecial(RakNet::NetworkID playerIDs[], int size)
+void Wrestler::UseSpecial(std::vector<Character*> players)
 {
-	printf("The crowd is cheering you on, your speed and attack doubled!\n");
-	m_spTurnsRemaining = 3;
+	if(m_isMaster)
+		printf("The crowd is cheering you on, your speed and attack doubled!\n");
+	else
+		printf("The crowd is cheering %s on, their speed and attack is doubled!\n", m_name);
+	m_spTurnsRemaining = 7;
 	m_attack *= 2;
 	m_speed *= 1.5f;
 
 	int healPercent = (float)m_maxHealth * 0.25f;
-	printf("The crowd's cheers encouraged you. \n you heal for %i!\n", healPercent);
 	SetDamage(healPercent);
+	if (m_isMaster)
+		printf("The crowd's cheers encouraged you. \nYou heal for %i!\n", healPercent);
+	else
+		printf("The crowd's cheers encouraged %s. \nThey heal for %i!\n", m_name, healPercent);
+
 }

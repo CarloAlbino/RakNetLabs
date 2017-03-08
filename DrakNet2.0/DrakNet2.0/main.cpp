@@ -88,20 +88,33 @@ int main()
 	{
 		printf("\nTime to connect..\n");
 
-		printf("Please enter the IP Address to connect to:\n");
+		RakNet::SystemAddress sa;
+		printf("\nMy IP addresses:\n");
+		for (unsigned int i = 0; i < g_rakPeerInterface->GetNumberOfAddresses(); i++)
+		{
+			sa = g_rakPeerInterface->GetInternalID(RakNet::UNASSIGNED_SYSTEM_ADDRESS, i);
+			printf("%i. %s (LAN=%i)\n", i + 1, sa.ToString(false), sa.IsLANAddress());
+		}
+
+		char ipNum[32];
+		printf("Type the ip address to use:\n");
+
+		Gets(ipNum, sizeof(ipNum));
+
+		printf("\nPlease enter the IP Address to connect to:\n");
 		char ip[32];
 		Gets(ip, sizeof(ip));
 
-		printf("Please enter the port to connect to:\n");
+		printf("\nPlease enter the port to connect to:\n");
 		char port[32];
 		Gets(port, sizeof(port));
 		int portNum = atoi(port);
 
-		while (IRNS2_Berkley::IsPortInUse(g_startingPort, ip, AF_INET, SOCK_DGRAM) == true)
+		while (IRNS2_Berkley::IsPortInUse(g_startingPort, ipNum, AF_INET, SOCK_DGRAM) == true)
 		{
 			g_startingPort++;
 		}
-		SocketDescriptor sd(g_startingPort, ip);
+		SocketDescriptor sd(g_startingPort, ipNum);
 
 		StartupResult result = g_rakPeerInterface->Startup(maxConnections, &sd, 1);
 		if (result != RAKNET_STARTED)
@@ -128,18 +141,22 @@ int main()
 	{
 		// Starting a new instance of the game
 		RakNet::SystemAddress sa;
-		printf("\nMy IP addresses:");
+		printf("\nMy IP addresses:\n");
 		for (unsigned int i = 0; i < g_rakPeerInterface->GetNumberOfAddresses(); i++)
 		{
 			sa = g_rakPeerInterface->GetInternalID(RakNet::UNASSIGNED_SYSTEM_ADDRESS, i);
 			printf("%i. %s (LAN=%i)\n", i + 1, sa.ToString(false), sa.IsLANAddress());
 		}
 
-		while (IRNS2_Berkley::IsPortInUse(g_startingPort, sa.ToString(false), AF_INET, SOCK_DGRAM) == true)
+		char ipNum[32];
+		printf("Type the ip address to use:\n");
+		Gets(ipNum, sizeof(ipNum));
+
+		while (IRNS2_Berkley::IsPortInUse(g_startingPort, ipNum, AF_INET, SOCK_DGRAM) == true)
 		{
 			g_startingPort++;
 		}
-		SocketDescriptor sd(g_startingPort, sa.ToString(false));
+		SocketDescriptor sd(g_startingPort, ipNum);
 
 		StartupResult result = g_rakPeerInterface->Startup(maxConnections, &sd, 1);
 		if (result != RAKNET_STARTED)
